@@ -1,0 +1,5 @@
+project_id = "green-shop"
+
+[db]
+schema_paths = ["./schemas/*.sql"]
+

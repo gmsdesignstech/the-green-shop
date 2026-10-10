@@ -1,0 +1,6 @@
+{
+  "name": "Green Shop",
+  "description": "Quick grocery delivery app delivering farm-fresh food, daily essentials, fruits, and vegetables in 10-15 minutes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

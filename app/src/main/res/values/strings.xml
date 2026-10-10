@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">THE GREEN SHOP</string>
+    <string name="brand_tagline">Freshness At Your Doorstep</string>
+    <string name="location_rationale_title">Enable Location for Fast Delivery</string>
+    <string name="location_rationale_subtitle">THE GREEN SHOP uses your location to pinpoint your delivery address and provide real-time live map tracking of your order.</string>
+    <string name="location_feature_live_tracking_title">Live Delivery Tracking</string>
+    <string name="location_feature_live_tracking_desc">Watch your delivery rider on the map with accurate minute-by-minute ETAs.</string>
+    <string name="location_feature_doorstep_title">Accurate Doorstep Delivery</string>
+    <string name="location_feature_doorstep_desc">Guarantees your farm-fresh groceries arrive quickly at the exact location.</string>
+    <string name="location_feature_privacy_title">Privacy Guaranteed</string>
+    <string name="location_feature_privacy_desc">Location is used only while fulfilling orders and is never shared or sold.</string>
+    <string name="location_btn_allow">Allow Location Access</string>
+    <string name="location_btn_not_now">Not Now</string>
+    <string name="location_btn_open_settings">Open App Settings</string>
+    <string name="location_btn_enable_gps">Turn On GPS</string>
+    <string name="location_denied_permanent_title">Location Permission Required</string>
+    <string name="location_denied_permanent_desc">Location access was previously disabled. Please allow location in Android Settings to unlock live GPS delivery tracking.</string>
+    <string name="location_gps_disabled_title">Location Services Turned Off</string>
+    <string name="location_gps_disabled_desc">Your device location/GPS is switched off. Please turn on location services for accurate live delivery tracking.</string>
+    <string name="location_approximate_notice">You have granted Approximate Location. For real-time turn-by-turn map tracking, Precise Location is recommended.</string>
+</resources>

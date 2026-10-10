@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Store Awning Canopy / Kiosk Top -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,38 L76,38 L80,48 L28,48 Z" />
+    
+    <!-- Canopy scalloped folds -->
+    <path
+        android:fillColor="#C8E6C9"
+        android:pathData="M38,38 L43,38 L44,48 L37,48 Z M51,38 L57,38 L58,48 L50,48 Z M65,38 L70,38 L71,48 L64,48 Z" />
+
+    <!-- Kiosk Awning Scallops -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,48 Q33,52 38,48 Q43,52 48,48 Q53,52 58,48 Q63,52 68,48 Q73,52 78,48 L80,48 L80,51 Q73,55 68,51 Q63,55 58,51 Q53,55 48,51 Q43,55 38,51 Q33,55 28,51 Z" />
+
+    <!-- Wooden Stall Counter / Basket -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33,56 L75,56 L71,78 L37,78 Z" />
+    
+    <!-- Fresh Leaf Emblem on Stall -->
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M54,61 C47,61 44,66 45,71 C49,74 56,73 59,69 C61,65 61,61 54,61 Z" />
+    <path
+        android:fillColor="#81C784"
+        android:pathData="M54,62 C51,64 50,68 52,70 C53,70 55,67 56,64 Z" />
+
+    <!-- Fresh Fruits & Veggies in Basket (Tomatoes, Greens) -->
+    <path
+        android:fillColor="#C8E6C9"
+        android:pathData="M40,54 A5,5 0 1,0 50,54 A5,5 0 1,0 40,54" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,52 A5,5 0 1,0 58,52 A5,5 0 1,0 48,52" />
+    <path
+        android:fillColor="#C8E6C9"
+        android:pathData="M57,53 A5,5 0 1,0 67,53 A5,5 0 1,0 57,53" />
+    
+    <!-- Mini Scooter Delivery Courier Accent -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M73,72 A3,3 0 1,0 79,72 A3,3 0 1,0 73,72 M63,72 A3,3 0 1,0 69,72 A3,3 0 1,0 63,72" />
+</vector>
