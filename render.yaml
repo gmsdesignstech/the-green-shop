@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: green-shop-api
+    name: the-green-shop-viyo
     runtime: node
     rootDir: backend
     buildCommand: npm ci && npm run typecheck && npm run build
