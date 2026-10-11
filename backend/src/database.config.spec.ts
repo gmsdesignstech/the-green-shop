@@ -22,6 +22,18 @@ describe('database configuration', () => {
     expect((config.ssl as { ca: string }).ca).toContain('\nexample\n');
   });
 
+  it('prevents connection-string TLS parameters from discarding the verified CA config', () => {
+    const config = databasePoolConfig({
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://user:password@db.example.com:5432/postgres?sslmode=require&application_name=keep-me',
+      DATABASE_SSL_CA: '-----BEGIN CERTIFICATE-----\\nexample\\n-----END CERTIFICATE-----',
+    });
+    const parsed = new URL(String(config.connectionString));
+    expect(parsed.searchParams.has('sslmode')).toBe(false);
+    expect(parsed.searchParams.get('application_name')).toBe('keep-me');
+    expect(config.ssl).toEqual(expect.objectContaining({ rejectUnauthorized: true, ca: expect.stringContaining('example') }));
+  });
+
   it.each([
     [{ code: '28P01' }, 'DATABASE_AUTHENTICATION_FAILED'],
     [{ code: 'SELF_SIGNED_CERT_IN_CHAIN' }, 'DATABASE_CERTIFICATE_FAILED'],

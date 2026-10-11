@@ -23,6 +23,12 @@ export function databasePoolConfig(env: NodeJS.ProcessEnv = process.env): PoolCo
     throw new Error('DATABASE_URL must include a PostgreSQL host, database, username and password');
   }
 
+  // node-postgres replaces the explicit ssl object when these URI parameters
+  // are present, which would silently discard DATABASE_SSL_CA.
+  for (const parameter of ['sslmode', 'sslcert', 'sslkey', 'sslrootcert']) {
+    url.searchParams.delete(parameter);
+  }
+
   const isProduction = env.NODE_ENV === 'production';
   if (isProduction && env.DATABASE_SSL === 'false') {
     throw new Error('DATABASE_SSL cannot be disabled in production');
@@ -33,7 +39,7 @@ export function databasePoolConfig(env: NodeJS.ProcessEnv = process.env): PoolCo
   const ca = inlineCa || (caPath ? readFileSync(caPath, 'utf8') : undefined);
 
   return {
-    connectionString,
+    connectionString: url.toString(),
     application_name: 'the-green-shop-api',
     max: 10,
     idleTimeoutMillis: 30_000,
