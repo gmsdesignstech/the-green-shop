@@ -40,6 +40,12 @@ describe('database configuration', () => {
     [{ code: 'ENOTFOUND' }, 'DATABASE_HOST_UNREACHABLE'],
     [{ code: 'ETIMEDOUT' }, 'DATABASE_CONNECTION_TIMEOUT'],
     [{ code: '3D000' }, 'DATABASE_NAME_INVALID'],
+    [{ message: 'Tenant or user not found' }, 'DATABASE_POOLER_IDENTITY_INVALID'],
+    [{ message: 'SASL: client password must be a string' }, 'DATABASE_CONFIGURATION_INVALID'],
+    [{ code: '53300' }, 'DATABASE_CAPACITY_EXCEEDED'],
+    [{ code: '42501' }, 'DATABASE_PERMISSION_DENIED'],
+    [{ code: '57P01' }, 'DATABASE_RESTARTING'],
+    [{ code: 'ECONNRESET' }, 'DATABASE_CONNECTION_RESET'],
   ])('classifies failures without returning credentials', (error, expected) => {
     expect(classifyDatabaseFailure(error)).toBe(expected);
   });

@@ -9,7 +9,8 @@ not a Flutter or pnpm workspace.
 - Runtime: Node
 - Build Command: `npm ci && npm run typecheck && npm run build`
 - Start Command: `npm start`
-- Health Check Path: `/api/v1/health/database` (the service is not ready until PostgreSQL responds)
+- Health Check Path: `/api/v1/health` during database diagnosis. Restore
+  `/api/v1/health/database` after PostgreSQL health succeeds so production readiness includes the database.
 
 The root `render.yaml` contains the same settings. Connect the GitHub repository in Render and use
 **New > Blueprint** to apply it, or create a Web Service manually with the values above. Render

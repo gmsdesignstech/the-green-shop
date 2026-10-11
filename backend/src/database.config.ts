@@ -7,6 +7,12 @@ export type DatabaseFailureCode =
   | 'DATABASE_NAME_INVALID'
   | 'DATABASE_HOST_UNREACHABLE'
   | 'DATABASE_CONNECTION_TIMEOUT'
+  | 'DATABASE_CONNECTION_RESET'
+  | 'DATABASE_CAPACITY_EXCEEDED'
+  | 'DATABASE_PERMISSION_DENIED'
+  | 'DATABASE_POOLER_IDENTITY_INVALID'
+  | 'DATABASE_RESTARTING'
+  | 'DATABASE_CONFIGURATION_INVALID'
   | 'DATABASE_UNAVAILABLE';
 
 export function databasePoolConfig(env: NodeJS.ProcessEnv = process.env): PoolConfig {
@@ -53,10 +59,16 @@ export function classifyDatabaseFailure(error: unknown): DatabaseFailureCode {
   const code = String(candidate?.code ?? '').toUpperCase();
   const message = String(candidate?.message ?? '').toLowerCase();
   if (code === '28P01' || code === '28000' || message.includes('password authentication failed')) return 'DATABASE_AUTHENTICATION_FAILED';
+  if (message.includes('tenant or user not found') || message.includes('invalid tenant')) return 'DATABASE_POOLER_IDENTITY_INVALID';
+  if (message.includes('client password must be a string') || message.includes('sasl') && message.includes('password')) return 'DATABASE_CONFIGURATION_INVALID';
   if (code === '3D000' || message.includes('database') && message.includes('does not exist')) return 'DATABASE_NAME_INVALID';
   if (['SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'CERT_HAS_EXPIRED'].includes(code)
     || message.includes('certificate')) return 'DATABASE_CERTIFICATE_FAILED';
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ECONNREFUSED') return 'DATABASE_HOST_UNREACHABLE';
   if (code === 'ETIMEDOUT' || message.includes('connection timeout')) return 'DATABASE_CONNECTION_TIMEOUT';
+  if (code === 'ECONNRESET' || message.includes('connection terminated unexpectedly') || message.includes('server closed the connection')) return 'DATABASE_CONNECTION_RESET';
+  if (code === '53300' || message.includes('too many connections')) return 'DATABASE_CAPACITY_EXCEEDED';
+  if (code === '42501' || message.includes('permission denied')) return 'DATABASE_PERMISSION_DENIED';
+  if (code === '57P01' || code === '57P02' || code === '57P03') return 'DATABASE_RESTARTING';
   return 'DATABASE_UNAVAILABLE';
 }
