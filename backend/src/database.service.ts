@@ -1,29 +1,13 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import { readFileSync } from 'node:fs';
 import { Pool, PoolClient, QueryResultRow } from 'pg';
+import { databasePoolConfig } from './database.config';
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor() {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) throw new Error('DATABASE_URL is required');
-    const caPath = process.env.DATABASE_SSL_CA_PATH;
-    const inlineCa = process.env.DATABASE_SSL_CA?.replace(/\\n/g, '\n').trim();
-    const ca = inlineCa || (caPath ? readFileSync(caPath, 'utf8') : undefined);
-    this.pool = new Pool({
-      connectionString,
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-      ssl: process.env.DATABASE_SSL === 'true'
-        ? {
-            rejectUnauthorized: true,
-            ...(ca ? { ca } : {}),
-          }
-        : undefined,
-    });
+    this.pool = new Pool(databasePoolConfig());
   }
 
   query<T extends QueryResultRow>(text: string, values: unknown[] = []) {
