@@ -29,4 +29,24 @@ describe('RiderService delivery safety',()=>{
   const db={query:jest.fn().mockResolvedValue({rowCount:0,rows:[]})} as any;
   await expect(new RiderService(db).dashboard('unprovisioned')).rejects.toBeInstanceOf(NotFoundException);
  });
+ it('provides an isolated empty dashboard and availability for the development partner',async()=>{
+  const previousNodeEnv=process.env.NODE_ENV;
+  const previousDevOtp=process.env.DEV_OTP_ENABLED;
+  process.env.NODE_ENV='development';
+  process.env.DEV_OTP_ENABLED='true';
+  const db={query:jest.fn()} as any;
+  try{
+   const service=new RiderService(db);
+   const dashboard=await service.dashboard('00000000-0000-4000-8000-000000000003');
+   expect(dashboard.profile.display_name).toBe('Development Delivery Partner');
+   expect(dashboard.activeAssignment).toBeNull();
+   expect(dashboard.unavailable).toEqual([]);
+   const availability=await service.setAvailability('00000000-0000-4000-8000-000000000003',{isOnline:true,version:1});
+   expect(availability).toEqual(expect.objectContaining({is_online:true,version:2}));
+   expect(db.query).not.toHaveBeenCalled();
+  }finally{
+   if(previousNodeEnv===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=previousNodeEnv;
+   if(previousDevOtp===undefined)delete process.env.DEV_OTP_ENABLED;else process.env.DEV_OTP_ENABLED=previousDevOtp;
+  }
+ });
 });

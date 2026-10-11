@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, HttpException, HttpStatus, Injec
 import { createHash, timingSafeEqual } from 'crypto';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database.service';
+import { DEVELOPMENT_USER_IDS } from '../dev-auth/dev-auth.service';
 import { AvailabilityDto, DeliveryActionDto, LocationBatchDto, RiderPageDto, SupportTicketDto } from './dto';
 
 const next:Record<string,string[]>={assigned:['accepted'],accepted:['arrived_pickup'],arrived_pickup:['picked_up'],picked_up:['out_for_delivery'],out_for_delivery:['delivered','failed'],delivered:[],failed:[],cancelled:[]};
@@ -9,9 +10,26 @@ const next:Record<string,string[]>={assigned:['accepted'],accepted:['arrived_pic
 @Injectable()
 export class RiderService {
   private readonly logger = new Logger(RiderService.name);
+  private developmentAvailability = { is_online: false, version: 1, updated_at: new Date() };
 
   constructor(private readonly db:DatabaseService){}
   async dashboard(userId:string){
+    if(this.isDevelopmentPartner(userId)){
+      return{
+        profile:{
+          display_name:'Development Delivery Partner',
+          service_area:'Local testing',
+          vehicle_type:'scooter',
+          is_online:this.developmentAvailability.is_online,
+          availability_version:this.developmentAvailability.version,
+        },
+        activeAssignment:null,
+        summary:{today_completed:0,today_earnings:'0',pending_earnings:'0',pending_payout:'0'},
+        recentDeliveries:[],
+        notifications:[],
+        unavailable:[],
+      };
+    }
     const [profile,active,summary,recent,notices]=await Promise.all([
       this.db.query(`select p.display_name,p.service_area,p.vehicle_type,coalesce(a.is_online,false) is_online,coalesce(a.version,1) availability_version
         from public.delivery_partner_profiles p left join public.partner_availability a on a.partner_user_id=p.user_id where p.user_id=$1`,[userId]),
@@ -43,6 +61,11 @@ export class RiderService {
     };
   }
   async setAvailability(userId:string,dto:AvailabilityDto){
+    if(this.isDevelopmentPartner(userId)){
+      if(dto.version!==this.developmentAvailability.version)throw new ConflictException('Availability changed on another device; refresh and retry');
+      this.developmentAvailability={is_online:dto.isOnline,version:dto.version+1,updated_at:new Date()};
+      return this.developmentAvailability;
+    }
     const result=await this.db.query(`update public.partner_availability set is_online=$1,version=version+1,updated_at=now()
       where partner_user_id=$2 and version=$3 returning is_online,version,updated_at`,[dto.isOnline,userId,dto.version]);
     if(!result.rowCount) throw new ConflictException('Availability changed on another device; refresh and retry');
@@ -87,6 +110,7 @@ export class RiderService {
   private async verifyOtp(client:any,id:number,otp?:string,key?:string){if(!key)throw new UnprocessableEntityException('Idempotency key is required');const v=await client.query('select otp_hash,failed_attempts,expires_at,verified_at from public.delivery_verifications where assignment_id=$1 for update',[id]);if(!v.rowCount)throw new UnprocessableEntityException('Delivery verification is not configured for this assignment');if(v.rows[0].verified_at)return;if(v.rows[0].failed_attempts>=5)throw new HttpException('Too many verification attempts',HttpStatus.TOO_MANY_REQUESTS);if(new Date(v.rows[0].expires_at)<new Date())throw new UnprocessableEntityException('Delivery verification code expired');const actual=createHash('sha256').update(otp??'').digest();const expected=Buffer.from(v.rows[0].otp_hash,'hex');if(actual.length!==expected.length||!timingSafeEqual(actual,expected)){await client.query('update public.delivery_verifications set failed_attempts=failed_attempts+1 where assignment_id=$1',[id]);throw new UnprocessableEntityException('Invalid delivery verification code');}await client.query('update public.delivery_verifications set verified_at=now() where assignment_id=$1',[id]);}
   private cursor(v?:string){const n=v?Number(v):Number.MAX_SAFE_INTEGER;if(!Number.isSafeInteger(n)||n<1)throw new UnprocessableEntityException('Invalid cursor');return n;}
   private page(rows:any[],limit:number){const more=rows.length>limit;const items=more?rows.slice(0,limit):rows;return{items,nextCursor:more?String(items[items.length-1].id):null};}
+  private isDevelopmentPartner(userId:string){return process.env.NODE_ENV==='development'&&process.env.DEV_OTP_ENABLED==='true'&&userId===DEVELOPMENT_USER_IDS.delivery_partner;}
   private async optionalDashboardQuery(section:string,text:string,values:unknown[],userId:string){
     try{
       const result=await this.db.query<QueryResultRow>(text,values);
