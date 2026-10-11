@@ -316,7 +316,7 @@ fun HomeScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "FARM TO FORK",
+                                        text = "FRESH PICKS",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Black,
                                         color = GreenShopDarkText
@@ -324,7 +324,7 @@ fun HomeScreen(
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Harvested at 5 AM Today 🌿",
+                                    text = "Selected for your basket",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GreenShopYellowBright
@@ -334,13 +334,13 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "100% Crisp Vegetables & Sweet Fruits",
+                                text = "Vegetables & fruits in one place",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = GreenShopWhite
                             )
                             Text(
-                                text = "Pesticide-tested, hydro-washed and doorstep delivered in 10 mins",
+                                text = "Browse the current catalog and choose what works for you",
                                 fontSize = 12.sp,
                                 color = GreenShopWhite.copy(alpha = 0.85f)
                             )
@@ -359,7 +359,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Shop Morning Harvest",
+                                    text = "Browse fresh picks",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = GreenShopDarkText

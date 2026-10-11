@@ -19,12 +19,12 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -61,30 +61,30 @@ fun BottomNavBar(
             unselectedIcon = Icons.Outlined.Home
         ),
         NavigationItem(
+            screen = AppScreen.CATEGORIES,
+            label = "Categories",
+            selectedIcon = Icons.Filled.GridView,
+            unselectedIcon = Icons.Outlined.GridView
+        ),
+        NavigationItem(
+            screen = AppScreen.OFFERS,
+            label = "Offers",
+            selectedIcon = Icons.Filled.LocalOffer,
+            unselectedIcon = Icons.Outlined.LocalOffer
+        ),
+        NavigationItem(
             screen = AppScreen.ORDER_AGAIN,
             label = "Orders",
             selectedIcon = Icons.Filled.ReceiptLong,
             unselectedIcon = Icons.Outlined.ReceiptLong
         ),
         NavigationItem(
-            screen = AppScreen.CATEGORIES,
-            label = "Explore",
-            selectedIcon = Icons.Filled.GridView,
-            unselectedIcon = Icons.Outlined.GridView
-        ),
-        NavigationItem(
-            screen = null,
-            label = "Cart",
-            selectedIcon = Icons.Filled.ShoppingCart,
-            unselectedIcon = Icons.Outlined.ShoppingCart
-        ),
-        NavigationItem(
             screen = AppScreen.PROFILE,
-            label = "Profile",
+            label = "Account",
             selectedIcon = Icons.Filled.Person,
             unselectedIcon = Icons.Outlined.Person
         )
-    ).sortedBy { listOf("Home", "Explore", "Cart", "Orders", "Profile").indexOf(it.label) }
+    )
 
     Box(
         modifier = modifier
@@ -106,7 +106,7 @@ fun BottomNavBar(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
                         .clickable {
-                            if (item.screen == null) onCartClick() else onNavigate(item.screen)
+                            item.screen?.let(onNavigate)
                         }
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                         .testTag("nav_${item.label.lowercase().replace(" ", "_")}"),
@@ -125,23 +125,6 @@ fun BottomNavBar(
                             tint = if (isSelected) GreenShopPrimary else GreenShopMutedText,
                             modifier = Modifier.size(22.dp)
                         )
-                        if (item.screen == null && cartCount > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .size(18.dp)
-                                    .clip(CircleShape)
-                                    .background(GreenShopPrimary),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = cartCount.coerceAtMost(99).toString(),
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(

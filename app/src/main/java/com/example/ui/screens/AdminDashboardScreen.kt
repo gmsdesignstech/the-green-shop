@@ -33,7 +33,7 @@ private val destinations = listOf(
     AdminDestination("Categories", Icons.Rounded.Category), AdminDestination("Promotions", Icons.Rounded.LocalOffer),
     AdminDestination("Reports", Icons.Rounded.Analytics), AdminDestination("Notifications", Icons.Rounded.Notifications),
     AdminDestination("Support", Icons.Rounded.SupportAgent), AdminDestination("Store settings", Icons.Rounded.Settings),
-    AdminDestination("Audit logs", Icons.Rounded.Security), AdminDestination("Customers", Icons.Rounded.People, false)
+    AdminDestination("Audit logs", Icons.Rounded.Security), AdminDestination("Customers", Icons.Rounded.People)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,9 +42,11 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
     var selected by rememberSaveable { mutableStateOf("Dashboard") }
     var search by rememberSaveable { mutableStateOf("") }
     var loading by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var dashboard by remember { mutableStateOf<AdminDashboard?>(null) }
     var rows by remember { mutableStateOf<List<AdminRow>>(emptyList()) }
+    var customerAction by remember { mutableStateOf<AdminRow?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -98,12 +100,30 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
                     error != null -> ErrorState(error!!) { loading = true }
                     selected == "Dashboard" -> DashboardContent(dashboard)
                     rows.isEmpty() -> EmptyState(selected)
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 30.dp)) { items(rows, key = { it.id }) { AdminRowCard(it) } }
+                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 30.dp)) { items(rows, key = { it.id }) { row -> AdminRowCard(row, if (selected == "Customers") ({ customerAction = row }) else null) } }
                 }
             }
         }
     }
     if (loading) LaunchedEffect(selected, search, loading) { load() }
+    customerAction?.let { customer ->
+        CustomerStatusDialog(
+            customer = customer,
+            busy = busy,
+            onDismiss = { customerAction = null },
+            onConfirm = { nextStatus, reason ->
+                scope.launch {
+                    busy = true
+                    val token = tokenProvider(false).getOrElse { error = adminErrorMessage(it); busy = false; return@launch }
+                    repository.changeCustomerStatus(token, customer.id, nextStatus, reason).fold(
+                        onSuccess = { customerAction = null; load() },
+                        onFailure = { error = adminErrorMessage(it) }
+                    )
+                    busy = false
+                }
+            }
+        )
+    }
 }
 
 @Composable private fun BrandHeader() = Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(24.dp)) { Text("THE GREEN SHOP", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge); Text("Store command centre", color = MaterialTheme.colorScheme.onPrimary.copy(alpha=.8f)) }
@@ -179,7 +199,12 @@ private fun adminErrorMessage(error: Throwable): String = when (error) {
     is IOException -> "Couldn't reach the admin API. Check the device network and API_BASE_URL, then retry."
     else -> error.message ?: "The admin request failed. Retry."
 }
-@Composable private fun AdminRowCard(row:AdminRow)=ElevatedCard(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(row.title,fontWeight=FontWeight.SemiBold);Text(row.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};row.status?.takeIf{it.isNotBlank()}?.let{AssistChip(onClick={},label={Text(it.replace('_',' ').uppercase(),style=MaterialTheme.typography.labelSmall)})}}}
+@Composable private fun AdminRowCard(row:AdminRow,onClick:(()->Unit)?=null)=ElevatedCard(Modifier.fillMaxWidth().then(if(onClick!=null)Modifier.clickable(onClick=onClick) else Modifier),shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(row.title,fontWeight=FontWeight.SemiBold);Text(row.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};row.status?.takeIf{it.isNotBlank()}?.let{AssistChip(onClick={onClick?.invoke()},label={Text(it.replace('_',' ').uppercase(),style=MaterialTheme.typography.labelSmall)})}}}
+@Composable private fun CustomerStatusDialog(customer:AdminRow,busy:Boolean,onDismiss:()->Unit,onConfirm:(String,String)->Unit){
+    val next=if(customer.status.equals("suspended",true))"active" else "suspended"
+    var reason by remember(customer.id){mutableStateOf("")}
+    AlertDialog(onDismissRequest=onDismiss,title={Text(if(next=="active")"Reactivate customer" else "Suspend customer")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("${customer.title} will be marked $next. This administrative action is recorded in the audit log.");OutlinedTextField(reason,{reason=it.take(500)},label={Text("Reason")},minLines=2,modifier=Modifier.fillMaxWidth())}},confirmButton={Button(onClick={onConfirm(next,reason.trim())},enabled=!busy&&reason.trim().length>=3){Text(if(next=="active")"Reactivate" else "Suspend")}},dismissButton={TextButton(onClick=onDismiss,enabled=!busy){Text("Cancel")}})
+}
 @Composable private fun LoadingState()=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){CircularProgressIndicator();Spacer(Modifier.height(12.dp));Text("Loading live operations…")}
 @Composable private fun ErrorState(message:String,retry:()->Unit)=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Rounded.CloudOff,null,tint=MaterialTheme.colorScheme.error);Text(message,modifier=Modifier.padding(16.dp));Button(onClick=retry){Text("Retry")}}
 @Composable private fun EmptyState(name:String)=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Rounded.Inbox,null,tint=MaterialTheme.colorScheme.primary);Text("No ${name.lowercase()} found",modifier=Modifier.padding(12.dp),fontWeight=FontWeight.SemiBold);Text("New records will appear here.",color=MaterialTheme.colorScheme.onSurfaceVariant)}

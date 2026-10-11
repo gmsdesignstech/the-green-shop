@@ -291,7 +291,7 @@ fun ProductDetailSheet(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "In Stock • Harvested Today",
+                    text = "In stock",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                     color = Color(0xFF2E7D32)
@@ -461,7 +461,7 @@ fun ProductDetailSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     GuaranteeItem("🌅 Morning Harvest", "Picked at 5 AM today from certified partner orchards & farms")
-                    GuaranteeItem("💧 Hydro-Washed", "Dirt-free, 100% pesticide tested and food-safe for your family")
+                    GuaranteeItem("✓ Product details", "Review the product information and pack size before adding")
                     GuaranteeItem("❄️ Cold Chain Kept", "Packed chilled so produce arrives fresh, crunchy & nutrient rich")
                 }
             }

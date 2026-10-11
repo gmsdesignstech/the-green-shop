@@ -1,8 +1,8 @@
-import { Body, Controller, Get, HttpException, Logger, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, Logger, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
-import { ArchiveProductDto, AssignPartnerDto, CategoryDto, InventoryAdjustmentDto, OrderStatusDto, PageQueryDto, ProductDto, PromotionDto } from './dto';
+import { ArchiveProductDto, AssignPartnerDto, CategoryDto, CustomerStatusDto, InventoryAdjustmentDto, OrderStatusDto, PageQueryDto, ProductDto, PromotionDto } from './dto';
 
 @Controller('admin')
 @UseGuards(AuthGuard, AdminGuard)
@@ -21,6 +21,9 @@ export class AdminController {
     }
   }
   @Get('products') products(@Query() q:PageQueryDto){return this.service.products(q);}
+  @Get('customers') customers(@Query() q:PageQueryDto){return this.service.customers(q);}
+  @Get('customers/:id') customer(@Param('id',ParseUUIDPipe) id:string){return this.service.customerDetail(id);}
+  @Patch('customers/:id/status') customerStatus(@Req() r:AuthenticatedRequest,@Param('id',ParseUUIDPipe) id:string,@Body() d:CustomerStatusDto){return this.service.changeCustomerStatus(r.user.id,id,d);}
   @Post('products') createProduct(@Req() r:AuthenticatedRequest,@Body() d:ProductDto){return this.service.createProduct(r.user.id,d);}
   @Patch('products/:id') updateProduct(@Req() r:AuthenticatedRequest,@Param('id',ParseIntPipe) id:number,@Body() d:ProductDto){return this.service.updateProduct(r.user.id,id,d);}
   @Patch('products/:id/archive') archive(@Req() r:AuthenticatedRequest,@Param('id',ParseIntPipe) id:number,@Body() d:ArchiveProductDto){return this.service.archiveProduct(r.user.id,id,d.archived);}

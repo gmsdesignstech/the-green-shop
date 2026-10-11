@@ -43,6 +43,7 @@ import com.example.ui.screens.CategoriesScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LandingScreen
 import com.example.ui.screens.OrderAgainScreen
+import com.example.ui.screens.OffersScreen
 import com.example.ui.screens.OrderTrackingScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.RecipesScreen
@@ -257,6 +258,7 @@ fun GreenShopApp(
                     viewModel = viewModel,
                     onViewCartClick = { showCartSheet = true }
                 )
+                AppScreen.OFFERS -> OffersScreen(viewModel = viewModel)
                 AppScreen.ORDER_AGAIN -> OrderAgainScreen(
                     viewModel = viewModel
                 )
@@ -342,6 +344,7 @@ fun ColumnNavigationWrapper(
         val showFloatingCart = cartCount > 0 && currentScreen in listOf(
             AppScreen.HOME,
             AppScreen.CATEGORIES,
+            AppScreen.OFFERS,
             AppScreen.RECIPES,
             AppScreen.ORDER_AGAIN,
             AppScreen.SEARCH
@@ -361,6 +364,7 @@ fun ColumnNavigationWrapper(
             AppScreen.HOME,
             AppScreen.ORDER_AGAIN,
             AppScreen.CATEGORIES,
+            AppScreen.OFFERS,
             AppScreen.PROFILE
         )
 

@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
-import { AssignPartnerDto, CategoryDto, InventoryAdjustmentDto, OrderStatusDto, PageQueryDto, ProductDto, PromotionDto } from './dto';
+import { AssignPartnerDto, CategoryDto, CustomerStatusDto, InventoryAdjustmentDto, OrderStatusDto, PageQueryDto, ProductDto, PromotionDto } from './dto';
 import type { QueryResultRow } from 'pg';
 
 type DashboardMetricRow = QueryResultRow & {
@@ -10,6 +10,12 @@ type DashboardMetricRow = QueryResultRow & {
   gross_sales: string;
   payment_failures: number;
   active_deliveries: number;
+  total_customers: number;
+  active_customers: number;
+  suspended_customers: number;
+  total_partners: number;
+  available_partners: number;
+  busy_partners: number;
 };
 type LowStockDashboardRow = QueryResultRow & { total_count: number };
 type PendingApplicationsDashboardRow = QueryResultRow & { count: number };
@@ -34,7 +40,16 @@ export class AdminService {
         count(*) filter (where status='delivered')::int completed_orders,
         coalesce(sum(total) filter (where payment_status='captured'),0) gross_sales,
         count(*) filter (where payment_status='failed')::int payment_failures,
-        count(*) filter (where status in ('rider_assigned','out_for_delivery'))::int active_deliveries
+        count(*) filter (where status in ('rider_assigned','out_for_delivery'))::int active_deliveries,
+        (select count(*)::int from public.user_profiles p where not exists
+          (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))) total_customers,
+        (select count(*)::int from public.user_profiles p where p.account_status='active' and not exists
+          (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))) active_customers,
+        (select count(*)::int from public.user_profiles p where p.account_status='suspended' and not exists
+          (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))) suspended_customers,
+        (select count(*)::int from public.delivery_partner_profiles) total_partners,
+        (select count(*)::int from public.partner_availability where is_online) available_partners,
+        (select count(distinct partner_user_id)::int from public.delivery_assignments where status in ('accepted','arrived_pickup','picked_up','out_for_delivery')) busy_partners
         from public.orders where created_at >= $1 and created_at < $2`, range),
       this.dashboardRows('sales', `select date_trunc('day',created_at)::date as "day", coalesce(sum(total),0) gross_sales
         from public.orders where payment_status='captured' and created_at >= $1 and created_at < $2
@@ -68,6 +83,12 @@ export class AdminService {
           gross_sales: null,
           payment_failures: null,
           active_deliveries: null,
+          total_customers: null,
+          active_customers: null,
+          suspended_customers: null,
+          total_partners: null,
+          available_partners: null,
+          busy_partners: null,
         }),
         low_stock_products: low.failed ? null : Number(low.rows[0]?.total_count ?? 0),
         pending_partner_applications: pending.failed ? null : Number(pending.rows[0]?.count ?? 0),
@@ -96,6 +117,43 @@ export class AdminService {
       );
       return { rows: [], failed: true };
     }
+  }
+
+  async customers(q: PageQueryDto) {
+    const result = await this.db.query(`select p.user_id id,p.display_name,u.phone,u.phone_confirmed_at,
+      p.account_status,p.created_at,p.updated_at,max(o.updated_at) last_order_at,
+      count(o.id) filter (where o.status='delivered')::int completed_orders,
+      coalesce(sum(o.total) filter (where o.status='delivered' and o.payment_status in ('captured','cod_collected')),0) valid_spend
+      from public.user_profiles p join auth.users u on u.id=p.user_id
+      left join public.orders o on o.customer_user_id=p.user_id
+      where not exists (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))
+      and ($1::text is null or p.display_name ilike '%'||$1||'%' or u.phone ilike '%'||$1||'%' or p.user_id::text=$1)
+      and ($2::text is null or p.account_status=$2)
+      group by p.user_id,p.display_name,u.phone,u.phone_confirmed_at,p.account_status,p.created_at,p.updated_at
+      order by p.created_at desc,p.user_id desc limit $3`, [q.search ?? null,q.status ?? null,q.limit]);
+    return { items: result.rows, nextCursor: null };
+  }
+
+  async customerDetail(userId: string) {
+    const customer = await this.db.query(`select p.user_id id,p.display_name,p.avatar_url,p.account_status,
+      p.created_at,p.updated_at,u.phone,u.phone_confirmed_at,u.last_sign_in_at
+      from public.user_profiles p join auth.users u on u.id=p.user_id
+      where p.user_id=$1 and not exists (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))`, [userId]);
+    if (!customer.rowCount) throw new NotFoundException('Customer not found');
+    const orders = await this.db.query(`select id,status,payment_status,total,created_at,updated_at
+      from public.orders where customer_user_id=$1 order by created_at desc limit 50`, [userId]);
+    return { ...customer.rows[0], orders: orders.rows };
+  }
+
+  changeCustomerStatus(actor: string, userId: string, dto: CustomerStatusDto) {
+    return this.db.transaction(async client => {
+      const result = await client.query(`update public.user_profiles p set account_status=$1,updated_at=now()
+        where p.user_id=$2 and not exists (select 1 from public.trusted_role_assignments r where r.user_id=p.user_id and r.role in ('admin','delivery_partner'))
+        returning p.user_id id,p.display_name,p.account_status,p.updated_at`, [dto.status,userId]);
+      if (!result.rowCount) throw new NotFoundException('Customer not found');
+      await this.audit(client,actor,`customer.${dto.status}`,'customer',userId,{reason:dto.reason.trim()});
+      return result.rows[0];
+    });
   }
 
   async products(q: PageQueryDto) {

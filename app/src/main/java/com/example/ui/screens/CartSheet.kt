@@ -99,11 +99,9 @@ fun CartSheet(
         return
     }
 
-    val deliveryFee = if (cartTotal > 199 || cartTotal == 0.0) 0.0 else 15.0
-    val handlingFee = 4.0
-    val bagFee = 5.0
-    val discount = if (cartTotal > 100) 25.0 else 0.0
-    val grandTotal = (cartTotal + deliveryFee + handlingFee + bagFee + selectedTip - discount).coerceAtLeast(0.0)
+    // Only the item subtotal is authoritative while server-side checkout is unavailable.
+    // Delivery fees, discounts and the final payable amount must come from a checkout quote.
+    val displayedSubtotal = cartTotal + selectedTip
 
     Column(
         modifier = modifier
@@ -142,7 +140,7 @@ fun CartSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "⚡ Delivery in 10-15 mins",
+                        text = "Delivery estimate shown at checkout",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = GreenShopPrimary
@@ -344,27 +342,26 @@ fun CartSheet(
                                 fontSize = 14.sp
                             )
                             BillRow("Items Total", "₹${cartTotal.toInt()}")
-                            BillRow("Delivery Fee", if (deliveryFee == 0.0) "FREE" else "₹${deliveryFee.toInt()}", isGreen = deliveryFee == 0.0)
-                            BillRow("Handling Charge", "₹${handlingFee.toInt()}")
-                            BillRow("Green Biodegradable Bag", "₹${bagFee.toInt()}")
-                            if (discount > 0) {
-                                BillRow("Farm Savings Discount", "-₹${discount.toInt()}", isGreen = true)
-                            }
                             if (selectedTip > 0) {
                                 BillRow("Rider Tip", "₹${selectedTip.toInt()}")
                             }
+                            Text(
+                                text = "Delivery fees, discounts and taxes are calculated securely by the server at checkout.",
+                                fontSize = 11.sp,
+                                color = GreenShopMutedText
+                            )
                             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Text(
-                                    text = "To Pay",
+                                    text = "Current subtotal",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 16.sp
                                 )
                                 Text(
-                                    text = "₹${grandTotal.toInt()}",
+                                    text = "₹${displayedSubtotal.toInt()}",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 16.sp,
                                     color = GreenShopDarkGreen
@@ -395,7 +392,7 @@ fun CartSheet(
                 ) {
                     Column {
                         Text(
-                            text = "₹${grandTotal.toInt()}",
+                            text = "₹${displayedSubtotal.toInt()}",
                             fontWeight = FontWeight.Black,
                             fontSize = 15.sp,
                             color = GreenShopWhite

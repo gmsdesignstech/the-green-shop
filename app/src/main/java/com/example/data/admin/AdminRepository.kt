@@ -6,6 +6,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
@@ -29,9 +31,28 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
     suspend fun dashboard(token: String): Result<AdminDashboard> =
         get("admin/dashboard", token, ::parseAdminDashboard)
 
+    suspend fun changeCustomerStatus(token: String, customerId: String, status: String, reason: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            if (!isConfigured) return@withContext Result.failure(IllegalStateException("Set API_BASE_URL to the deployed HTTPS backend."))
+            runCatching {
+                val body = JSONObject().put("status", status).put("reason", reason).toString()
+                    .toRequestBody("application/json".toMediaType())
+                val request = Request.Builder().url("$baseUrl/admin/customers/$customerId/status")
+                    .header("Authorization", "Bearer $token").patch(body).build()
+                client.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val message = runCatching { JSONObject(raw).optString("message") }.getOrNull().orEmpty()
+                        throw AdminApiException(response.code, message.ifBlank { "Customer update failed (${response.code})." })
+                    }
+                }
+            }
+        }
+
     suspend fun list(section: String, token: String, search: String = ""): Result<List<AdminRow>> {
         val path = when (section) {
             "Orders" -> "admin/orders"
+            "Customers" -> "admin/customers"
             "Products" -> "admin/products"
             "Categories" -> "admin/categories"
             "Inventory" -> "admin/inventory"
@@ -56,6 +77,16 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
 
     private fun mapRow(section: String, item: JSONObject): AdminRow = when (section) {
         "Orders" -> AdminRow(item.optString("id"), "Order #${item.optString("id")}", "₹${item.optString("total")} • ${item.optString("payment_status")}", item.optString("status"))
+        "Customers" -> AdminRow(
+            item.optString("id"),
+            item.optString("display_name").ifBlank { "Customer ${item.optString("id").take(8)}" },
+            listOfNotNull(
+                item.optString("phone").takeIf { it.isNotBlank() },
+                "${item.optInt("completed_orders")} completed orders",
+                "₹${item.optString("valid_spend", "0")} valid spend"
+            ).joinToString(" • "),
+            item.optString("account_status")
+        )
         "Products" -> AdminRow(item.optString("id"), item.optString("name"), "₹${item.optString("price")} • ${item.optString("unit")}", if (item.optBoolean("is_archived")) "ARCHIVED" else "ACTIVE")
         "Categories" -> AdminRow(item.optString("id"), item.optString("name"), "${item.optInt("product_count")} products • order ${item.optInt("sort_order")}", if (item.optBoolean("is_visible")) "VISIBLE" else "HIDDEN")
         "Inventory" -> AdminRow(item.optString("product_id"), item.optString("name"), "${item.optInt("available")} available • ${item.optInt("reserved")} reserved", if (item.optInt("available") <= item.optInt("low_stock_threshold")) "LOW STOCK" else "HEALTHY")
@@ -103,6 +134,12 @@ internal fun parseAdminDashboard(json: JSONObject): AdminDashboard {
             metric("Gross sales", "gross_sales"),
             metric("Payment failures", "payment_failures"),
             metric("Active deliveries", "active_deliveries"),
+            metric("Customers", "total_customers"),
+            metric("Active customers", "active_customers"),
+            metric("Suspended customers", "suspended_customers"),
+            metric("Delivery partners", "total_partners"),
+            metric("Partners online", "available_partners"),
+            metric("Partners busy", "busy_partners"),
             metric("Low stock", "low_stock_products", "lowStock"),
             metric("Partner applications", "pending_partner_applications", "pendingPartnerApplications")
         ),

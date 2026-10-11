@@ -106,4 +106,26 @@ describe('AdminService business rules', () => {
       terms: '', isEnabled: true,
     })).rejects.toBeInstanceOf(UnprocessableEntityException);
   });
+
+  it('lists customers without exposing authentication secrets or staff accounts', async () => {
+    const db = { query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }) } as any;
+    await new AdminService(db).customers({ limit: 25, search: '9876' });
+    const [sql, values] = db.query.mock.calls[0];
+    expect(sql).toContain('join auth.users');
+    expect(sql).toContain("r.role in ('admin','delivery_partner')");
+    expect(sql).not.toContain('encrypted_password');
+    expect(values).toEqual(['9876', null, 25]);
+  });
+
+  it('changes customer status transactionally and writes an audit record', async () => {
+    const client = { query: jest.fn()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'customer-1', account_status: 'suspended' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) };
+    const db = { transaction: (work: any) => work(client) } as any;
+    const result = await new AdminService(db).changeCustomerStatus(
+      'admin-1', 'customer-1', { status: 'suspended', reason: 'Repeated abuse' },
+    );
+    expect(result.account_status).toBe('suspended');
+    expect(client.query.mock.calls[1][1]).toEqual(expect.arrayContaining(['admin-1', 'customer.suspended', 'customer']));
+  });
 });

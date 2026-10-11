@@ -22,8 +22,9 @@ import kotlinx.coroutines.launch
 
 enum class AppScreen {
     HOME,
-    ORDER_AGAIN,
     CATEGORIES,
+    OFFERS,
+    ORDER_AGAIN,
     RECIPES,
     WALLET,
     PROFILE,
@@ -60,21 +61,16 @@ class GreenShopViewModel : ViewModel() {
     }
 
     // Cart State
-    private val _cartItems = MutableStateFlow<List<CartItem>>(
-        // Initial cart has 1 item as shown in screenshots ("View cart 1 Item")
-        listOf(
-            CartItem(SampleData.products.first { it.id == "p_tomato" }, 1)
-        )
-    )
+    private val _cartItems = MutableStateFlow<List<CartItem>>(emptyList())
     val cartItems: StateFlow<List<CartItem>> = _cartItems.asStateFlow()
 
     val cartCount: StateFlow<Int> = _cartItems.combine(_cartItems) { items, _ ->
         items.sumOf { it.quantity }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 1)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val cartTotal: StateFlow<Double> = _cartItems.combine(_cartItems) { items, _ ->
         items.sumOf { it.product.price * it.quantity }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, 32.0)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0.0)
 
     fun addToCart(product: Product) {
         val current = _cartItems.value.toMutableList()

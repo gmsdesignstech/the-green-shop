@@ -10,6 +10,8 @@ export class DatabaseService implements OnModuleDestroy {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error('DATABASE_URL is required');
     const caPath = process.env.DATABASE_SSL_CA_PATH;
+    const inlineCa = process.env.DATABASE_SSL_CA?.replace(/\\n/g, '\n').trim();
+    const ca = inlineCa || (caPath ? readFileSync(caPath, 'utf8') : undefined);
     this.pool = new Pool({
       connectionString,
       max: 10,
@@ -18,7 +20,7 @@ export class DatabaseService implements OnModuleDestroy {
       ssl: process.env.DATABASE_SSL === 'true'
         ? {
             rejectUnauthorized: true,
-            ...(caPath ? { ca: readFileSync(caPath, 'utf8') } : {}),
+            ...(ca ? { ca } : {}),
           }
         : undefined,
     });

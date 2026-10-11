@@ -22,6 +22,8 @@ supplies `PORT`; the API binds it on `0.0.0.0` and serves routes under `/api/v1`
 - `DATABASE_URL`: the TLS pooler connection string from Supabase **Connect**. Use a dedicated,
   least-privilege database login.
 - `DATABASE_SSL=true`
+- `DATABASE_SSL_CA`: complete database root certificate PEM from Supabase **Database Settings →
+  SSL Configuration**. Store it as a Render secret; do not commit the certificate.
 - `SUPABASE_URL`: the Supabase project HTTPS URL.
 - `SUPABASE_PUBLISHABLE_KEY`: the public/publishable key, never a secret or service-role key.
 - `CORS_ORIGINS`: comma-separated HTTPS browser origins, only if a browser frontend calls this API.

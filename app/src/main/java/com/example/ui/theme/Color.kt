@@ -4,10 +4,10 @@ import androidx.compose.ui.graphics.Color
 
 // The Green Shop Signature Palette
 val GreenShopDarkGreen = Color(0xFF12372A)
-val GreenShopPrimary = Color(0xFF176B45)
+val GreenShopPrimary = Color(0xFF155D36)
 val GreenShopMediumGreen = Color(0xFF238B5B)
 val GreenShopLightGreen = Color(0xFF43B97A)
-val GreenShopMintSurface = Color(0xFFE9F6EE)
+val GreenShopMintSurface = Color(0xFFE5F4D9)
 val GreenShopPaleGreen = Color(0xFFF4FAF6)
 
 // Warm harvest accent palette
@@ -20,7 +20,7 @@ val GreenShopDarkText = Color(0xFF17211B)
 val GreenShopMutedText = Color(0xFF647068)
 val GreenShopLightBorder = Color(0xFFE4E9E5)
 val GreenShopWhite = Color(0xFFFFFFFF)
-val GreenShopBackground = Color(0xFFF7F9F7)
+val GreenShopBackground = Color(0xFFF5FAF3)
 val GreenShopCardBg = Color(0xFFFFFFFF)
 
 // Status & Tag Colors

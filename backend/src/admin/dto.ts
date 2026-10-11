@@ -43,6 +43,11 @@ export class AssignPartnerDto {
 
 export class ArchiveProductDto { @IsBoolean() archived!: boolean; }
 
+export class CustomerStatusDto {
+  @IsIn(['active', 'suspended']) status!: 'active' | 'suspended';
+  @IsString() @Length(3, 500) reason!: string;
+}
+
 export class CategoryDto {
   @IsString() @Length(2, 120) name!: string;
   @IsString() @Length(2, 140) slug!: string;

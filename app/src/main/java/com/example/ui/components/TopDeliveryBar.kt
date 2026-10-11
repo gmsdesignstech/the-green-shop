@@ -80,7 +80,7 @@ fun TopDeliveryBar(
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "Freshness in 10–15 minutes",
+                    text = "Delivery time confirmed at checkout",
                     fontSize = 21.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = GreenShopWhite,
