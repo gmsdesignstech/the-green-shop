@@ -35,8 +35,7 @@ Development OTP variables must not be added to the production service.
 
 ## Deploy and verify
 
-1. Push this repository to GitHub. This checkout currently has no Git remote, so connect the real
-   repository before attempting a Render deployment.
+1. Push reviewed changes to the configured GitHub `origin` on the deployment branch.
 2. In Render, connect GitHub, select the repository and branch, then apply `render.yaml`.
 3. Enter every secret marked `sync: false` in the Render dashboard and deploy.
 4. Copy the real HTTPS service URL shown by Render only after deployment succeeds.
@@ -57,5 +56,18 @@ PowerShell:
 .\gradlew.bat assembleRelease -PAPI_BASE_URL=https://YOUR-REAL-RENDER-HOST/api/v1
 ```
 
-Release signing also requires `KEYSTORE_PATH`, `STORE_PASSWORD`, and `KEY_PASSWORD`. Replace the
-example host only with the real Render URL after its health endpoints have been tested.
+Release signing accepts either CI environment variables (`KEYSTORE_PATH`, `STORE_PASSWORD`,
+`KEY_ALIAS`, and `KEY_PASSWORD`) or an ignored root `key.properties` file:
+
+```properties
+storeFile=C:/secure/android/the-green-shop-upload.jks
+storePassword=YOUR_STORE_PASSWORD
+keyAlias=upload
+keyPassword=YOUR_KEY_PASSWORD
+```
+
+If no upload key exists and the application has never been published, generate one outside the
+repository with Android Studio's **Build > Generate Signed Bundle / APK** flow or `keytool`, then
+back it up securely. Never replace the signing identity of a published app without explicit
+approval. Replace the example API host only with the real Render URL after both health endpoints
+have been tested.

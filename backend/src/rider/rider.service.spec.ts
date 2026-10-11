@@ -9,4 +9,24 @@ describe('RiderService delivery safety',()=>{
  it('rejects location sharing outside active transit states',async()=>{const db={query:jest.fn().mockResolvedValue({rowCount:0})} as any;await expect(new RiderService(db).locations('p',2,{points:[{latitude:1,longitude:2,recordedAt:new Date().toISOString()}]})).rejects.toBeInstanceOf(ForbiddenException);});
  it('rejects stale location samples for an active assignment',async()=>{const db={query:jest.fn().mockResolvedValueOnce({rowCount:1})} as any;await expect(new RiderService(db).locations('p',2,{points:[{latitude:1,longitude:2,recordedAt:new Date(Date.now()-11*60_000).toISOString()}]})).rejects.toBeInstanceOf(UnprocessableEntityException);});
  it('rejects the null island coordinate',async()=>{const db={query:jest.fn().mockResolvedValueOnce({rowCount:1})} as any;await expect(new RiderService(db).locations('p',2,{points:[{latitude:0,longitude:0,recordedAt:new Date().toISOString()}]})).rejects.toBeInstanceOf(UnprocessableEntityException);});
+ it('keeps the rider dashboard available when an optional metrics query fails',async()=>{
+  const db={query:jest.fn(async(text:string)=>{
+   if(text.includes('delivery_partner_profiles'))return{rowCount:1,rows:[{display_name:'Test Partner',service_area:'Local',vehicle_type:'Bicycle',is_online:false,availability_version:1}]};
+   if(text.includes('today_completed'))throw Object.assign(new Error('connection failed'),{code:'ECONNRESET'});
+   if(text.includes('o.delivery_address'))return{rowCount:0,rows:[]};
+   if(text.includes('partner_notifications'))return{rowCount:0,rows:[]};
+   return{rowCount:0,rows:[]};
+  })} as any;
+
+  const result=await new RiderService(db).dashboard('partner-user');
+
+  expect(result.profile.display_name).toBe('Test Partner');
+  expect(result.activeAssignment).toBeNull();
+  expect(result.summary.today_earnings).toBeNull();
+  expect(result.unavailable).toContain('summary');
+ });
+ it('does not turn a missing rider profile into an empty dashboard',async()=>{
+  const db={query:jest.fn().mockResolvedValue({rowCount:0,rows:[]})} as any;
+  await expect(new RiderService(db).dashboard('unprovisioned')).rejects.toBeInstanceOf(NotFoundException);
+ });
 });

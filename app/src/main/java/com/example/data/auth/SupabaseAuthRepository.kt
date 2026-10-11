@@ -1,5 +1,6 @@
 package com.example.data.auth
 
+import android.content.Context
 import com.example.BuildConfig
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
@@ -18,16 +19,29 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import android.util.Log
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
-class SupabaseAuthRepository : AuthRepository {
+class SupabaseAuthRepository internal constructor(
+    context: Context,
+    private val developmentSessionStore: DevelopmentSessionStore =
+        AndroidKeystoreDevelopmentSessionStore(context.applicationContext)
+) : AuthRepository {
     private var requestedRole: String? = null
     private var developmentAccessToken: String? = null
     private var developmentRefreshToken: String? = null
     private var developmentUser: AuthenticatedUser? = null
+    private var developmentSessionRole: String? = null
+    private val developmentSessionRestoreMutex = Mutex()
+    private var developmentSessionRestoreAttempted = false
     private val url = BuildConfig.AUTH_SUPABASE_URL.trim()
     private val publishableKey = BuildConfig.AUTH_SUPABASE_PUBLISHABLE_KEY.trim()
     private val refreshMutex = Mutex()
-    private val http = OkHttpClient()
+    private val http = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        .callTimeout(15, TimeUnit.SECONDS)
+        .build()
     private val apiBaseUrl = BuildConfig.API_BASE_URL.trim().trimEnd('/')
 
     private val isFixedDebugOtpEnabled = BuildConfig.DEBUG && BuildConfig.DEV_FIXED_OTP_ENABLED
@@ -71,6 +85,9 @@ class SupabaseAuthRepository : AuthRepository {
     }
 
     override suspend fun currentUser(): Result<AuthenticatedUser?> {
+        if (isFixedDebugOtpEnabled) {
+            restoreDevelopmentSession()?.let { return Result.success(it) }
+        }
         developmentUser?.let { return Result.success(it) }
         val configuredClient = client ?: return Result.success(null)
         return runCatching {
@@ -111,9 +128,19 @@ class SupabaseAuthRepository : AuthRepository {
     }
 
     override suspend fun signOut(): Result<Unit> {
-        developmentRefreshToken?.let { refresh ->
-            runCatching { developmentPost("dev-auth/logout",JSONObject().put("refreshToken",refresh)) }
-            developmentAccessToken=null;developmentRefreshToken=null;developmentUser=null;requestedRole=null
+        if (isFixedDebugOtpEnabled) {
+            val refreshToken = developmentRefreshToken
+            if (refreshToken != null) {
+                runCatching {
+                    developmentPost("dev-auth/logout", JSONObject().put("refreshToken", refreshToken))
+                }.onFailure {
+                    Log.w("GreenShopAuth", "Could not revoke the development session on the API")
+                }
+            }
+            withContext(Dispatchers.IO) { developmentSessionStore.clear() }
+            clearDevelopmentSession()
+            requestedRole = null
+            developmentSessionRestoreAttempted = true
             return Result.success(Unit)
         }
         return authResult { auth.signOut() }
@@ -121,19 +148,100 @@ class SupabaseAuthRepository : AuthRepository {
 
     private suspend fun loginDevelopmentUser(phone:String,otp:String,role:String):Result<Unit> = runCatching {
         val json=developmentPost("dev-auth/login",JSONObject().put("phone",phone).put("otp",otp).put("role",role))
-        storeDevelopmentSession(json)
+        storeDevelopmentSession(json, expectedPhone = phone, expectedRole = role)
+        developmentSessionRestoreAttempted = true
     }
 
     private suspend fun refreshDevelopmentSession():Result<String> = runCatching {
         val refresh=developmentRefreshToken?:error("Development refresh token is unavailable")
         val json=developmentPost("dev-auth/refresh",JSONObject().put("refreshToken",refresh))
-        storeDevelopmentSession(json)
+        storeDevelopmentSession(
+            json,
+            expectedPhone = developmentUser?.verifiedPhone,
+            expectedRole = developmentSessionRole,
+            expectedUserId = developmentUser?.id
+        )
         developmentAccessToken?:error("Development access token is unavailable")
     }
 
-    private fun storeDevelopmentSession(json:JSONObject){
-        developmentAccessToken=json.getString("accessToken");developmentRefreshToken=json.getString("refreshToken")
-        val user=json.getJSONObject("user");val role=user.getString("role");developmentUser=AuthenticatedUser(user.getString("id"),user.getString("phone"),when(role){"admin"->"Development administrator";"delivery_partner"->"Development delivery partner";else->"Development customer"})
+    private suspend fun restoreDevelopmentSession(): AuthenticatedUser? =
+        developmentSessionRestoreMutex.withLock {
+            if (developmentSessionRestoreAttempted) return@withLock developmentUser
+            val saved = withContext(Dispatchers.IO) { developmentSessionStore.read() }
+            developmentSessionRestoreAttempted = true
+            if (saved == null) return@withLock null
+
+            developmentAccessToken = saved.accessToken
+            developmentRefreshToken = saved.refreshToken
+            developmentSessionRole = saved.role
+            developmentUser = AuthenticatedUser(saved.userId, saved.phone, developmentDisplayName(saved.role))
+
+            refreshMutex.withLock {
+                refreshDevelopmentSession().fold(
+                    onSuccess = { developmentUser },
+                    onFailure = { error ->
+                        if (error !is IOException && "unreachable" !in error.message.orEmpty().lowercase()) {
+                            withContext(Dispatchers.IO) { developmentSessionStore.clear() }
+                            clearDevelopmentSession()
+                            null
+                        } else {
+                            throw error
+                        }
+                    }
+                )
+            }
+        }
+
+    private suspend fun storeDevelopmentSession(
+        json: JSONObject,
+        expectedPhone: String? = null,
+        expectedRole: String? = null,
+        expectedUserId: String? = null
+    ) {
+        val accessToken = json.getString("accessToken")
+        val refreshToken = json.getString("refreshToken")
+        val user = json.getJSONObject("user")
+        val userId = user.getString("id")
+        val phone = user.getString("phone")
+        val role = user.getString("role")
+        require(accessToken.isNotBlank() && refreshToken.isNotBlank() && userId.isNotBlank()) {
+            "Development authentication returned an incomplete session"
+        }
+        require(role in setOf("customer", "admin", "delivery_partner")) {
+            "Development authentication returned an invalid role"
+        }
+        require(expectedPhone == null || expectedPhone == phone) {
+            "Development authentication returned a different phone number"
+        }
+        require(expectedRole == null || expectedRole == role) {
+            "Development authentication returned a different role"
+        }
+        require(expectedUserId == null || expectedUserId == userId) {
+            "Development authentication returned a different user"
+        }
+
+        withContext(Dispatchers.IO) {
+            developmentSessionStore.write(
+                DevelopmentSession(accessToken, refreshToken, userId, phone, role)
+            )
+        }
+        developmentAccessToken = accessToken
+        developmentRefreshToken = refreshToken
+        developmentSessionRole = role
+        developmentUser = AuthenticatedUser(userId, phone, developmentDisplayName(role))
+    }
+
+    private fun clearDevelopmentSession() {
+        developmentAccessToken = null
+        developmentRefreshToken = null
+        developmentSessionRole = null
+        developmentUser = null
+    }
+
+    private fun developmentDisplayName(role: String) = when (role) {
+        "admin" -> "Development administrator"
+        "delivery_partner" -> "Development delivery partner"
+        else -> "Development customer"
     }
 
     private suspend fun developmentPost(path:String,body:JSONObject):JSONObject=withContext(Dispatchers.IO){

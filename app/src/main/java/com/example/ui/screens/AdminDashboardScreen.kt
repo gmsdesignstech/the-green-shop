@@ -17,9 +17,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.data.admin.AdminApiException
 import com.example.data.admin.AdminDashboard
 import com.example.data.admin.AdminRepository
 import com.example.data.admin.AdminRow
+import java.io.IOException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -48,7 +50,7 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
 
     suspend fun load() {
         loading = true; error = null
-        val firstToken = tokenProvider(false).getOrElse { error = it.message; loading = false; return }
+        val firstToken = tokenProvider(false).getOrElse { error = adminErrorMessage(it); loading = false; return }
         suspend fun request(token: String) = if (selected == "Dashboard") repository.dashboard(token).map { dashboard = it; emptyList() }
         else repository.list(selected, token, search)
         var result = request(firstToken)
@@ -56,9 +58,13 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
             (result.exceptionOrNull() as com.example.data.admin.AdminApiException).statusCode == 401
         ) {
             val refreshed = tokenProvider(true)
-            result = refreshed.getOrNull()?.let { request(it) } ?: Result.failure(refreshed.exceptionOrNull()!!)
+            result = refreshed.getOrNull()?.let { request(it) }
+                ?: Result.failure(refreshed.exceptionOrNull() ?: IllegalStateException("Admin session refresh failed"))
         }
-        result.fold(onSuccess = { if (selected != "Dashboard") rows = it }, onFailure = { error = it.message })
+        result.fold(
+            onSuccess = { if (selected != "Dashboard") rows = it },
+            onFailure = { error = adminErrorMessage(it) }
+        )
         loading = false
     }
     LaunchedEffect(selected) { search = ""; load() }
@@ -112,6 +118,22 @@ private fun DashboardContent(data: AdminDashboard?) {
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
         item { Text("Operations overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        if (data.unavailableSections.isNotEmpty()) {
+            item {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Some dashboard sections could not be loaded. Check the API/database logs and retry.",
+                        modifier = Modifier.padding(14.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        }
         item {
             data.metrics.chunked(2).forEach { pair ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -128,18 +150,34 @@ private fun DashboardContent(data: AdminDashboard?) {
             }
         }
         item { Text("Recent orders", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        if (data.recentOrders.isEmpty()) {
+        if ("recentOrders" in data.unavailableSections) {
+            item { Text("Recent orders are unavailable. Retry after checking the API/database connection.", color = MaterialTheme.colorScheme.error) }
+        } else if (data.recentOrders.isEmpty()) {
             item { Text("No orders in this period", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(data.recentOrders, key = { "order-${it.id}" }) { AdminRowCard(it) }
         }
         item { Text("Needs restocking", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        if (data.lowStock.isEmpty()) {
+        if ("lowStock" in data.unavailableSections) {
+            item { Text("Low-stock products are unavailable. Retry after checking the API/database connection.", color = MaterialTheme.colorScheme.error) }
+        } else if (data.lowStock.isEmpty()) {
             item { Text("No low-stock products", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(data.lowStock, key = { "stock-${it.id}" }) { AdminRowCard(it) }
         }
     }
+}
+
+private fun adminErrorMessage(error: Throwable): String = when (error) {
+    is AdminApiException -> when (error.statusCode) {
+        401 -> "Your admin session expired. Sign in again."
+        403 -> "Administrator access is required."
+        500 -> "The admin API failed while loading the dashboard. Check NestJS logs and database TLS configuration, then retry."
+        503 -> "The admin service is temporarily unavailable. Check database health, then retry."
+        else -> error.message ?: "The admin request failed (${error.statusCode})."
+    }
+    is IOException -> "Couldn't reach the admin API. Check the device network and API_BASE_URL, then retry."
+    else -> error.message ?: "The admin request failed. Retry."
 }
 @Composable private fun AdminRowCard(row:AdminRow)=ElevatedCard(Modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp)){Row(Modifier.fillMaxWidth().padding(16.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(row.title,fontWeight=FontWeight.SemiBold);Text(row.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};row.status?.takeIf{it.isNotBlank()}?.let{AssistChip(onClick={},label={Text(it.replace('_',' ').uppercase(),style=MaterialTheme.typography.labelSmall)})}}}
 @Composable private fun LoadingState()=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){CircularProgressIndicator();Spacer(Modifier.height(12.dp));Text("Loading live operations…")}

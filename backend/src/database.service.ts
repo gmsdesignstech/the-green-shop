@@ -1,4 +1,5 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
 import { Pool, PoolClient, QueryResultRow } from 'pg';
 
 @Injectable()
@@ -8,12 +9,18 @@ export class DatabaseService implements OnModuleDestroy {
   constructor() {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) throw new Error('DATABASE_URL is required');
+    const caPath = process.env.DATABASE_SSL_CA_PATH;
     this.pool = new Pool({
       connectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
-      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: true } : undefined,
+      ssl: process.env.DATABASE_SSL === 'true'
+        ? {
+            rejectUnauthorized: true,
+            ...(caPath ? { ca: readFileSync(caPath, 'utf8') } : {}),
+          }
+        : undefined,
     });
   }
 

@@ -1,5 +1,6 @@
-import { ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'crypto';
+import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database.service';
 import { AvailabilityDto, DeliveryActionDto, LocationBatchDto, RiderPageDto, SupportTicketDto } from './dto';
 
@@ -7,24 +8,39 @@ const next:Record<string,string[]>={assigned:['accepted'],accepted:['arrived_pic
 
 @Injectable()
 export class RiderService {
+  private readonly logger = new Logger(RiderService.name);
+
   constructor(private readonly db:DatabaseService){}
   async dashboard(userId:string){
     const [profile,active,summary,recent,notices]=await Promise.all([
-      this.db.query(`select p.display_name,p.service_area,p.vehicle_type,a.is_online,a.version availability_version
-        from public.delivery_partner_profiles p join public.partner_availability a on a.partner_user_id=p.user_id where p.user_id=$1`,[userId]),
-      this.db.query(`select a.id,a.order_id,a.status,a.version,a.pickup_name,a.pickup_address,a.pickup_instructions,a.delivery_instructions,
-        o.delivery_address,o.updated_at from public.delivery_assignments a join public.orders o on o.id=a.order_id
-        where a.partner_user_id=$1 and a.status not in ('delivered','failed','cancelled') order by a.assigned_at desc limit 1`,[userId]),
-      this.db.query(`select
+      this.db.query(`select p.display_name,p.service_area,p.vehicle_type,coalesce(a.is_online,false) is_online,coalesce(a.version,1) availability_version
+        from public.delivery_partner_profiles p left join public.partner_availability a on a.partner_user_id=p.user_id where p.user_id=$1`,[userId]),
+      this.optionalDashboardQuery('activeAssignment', `select a.id,a.order_id,a.status,a.version,a.pickup_name,a.pickup_address,a.pickup_instructions,a.delivery_instructions,
+        o.delivery_address,o.updated_at from public.delivery_assignments a left join public.orders o on o.id=a.order_id
+        where a.partner_user_id=$1 and a.status not in ('delivered','failed','cancelled') order by a.assigned_at desc limit 1`,[userId],userId),
+      this.optionalDashboardQuery('summary', `select
         (select count(*)::int from public.delivery_assignments where partner_user_id=$1 and status='delivered' and completed_at::date=current_date) today_completed,
         (select coalesce(sum(base_amount+incentive_amount+adjustment_amount),0) from public.partner_earnings where partner_user_id=$1 and status in ('earned','scheduled','paid') and earned_at::date=current_date) today_earnings,
         (select coalesce(sum(base_amount+incentive_amount+adjustment_amount),0) from public.partner_earnings where partner_user_id=$1 and status in ('earned','scheduled')) pending_earnings,
-        (select coalesce(sum(amount),0) from public.partner_payouts where partner_user_id=$1 and status in ('pending','processing')) pending_payout`,[userId]),
-      this.db.query(`select id,order_id,status,assigned_at,completed_at from public.delivery_assignments where partner_user_id=$1 order by assigned_at desc limit 5`,[userId]),
-      this.db.query(`select id,type,title,message,read_at,created_at from public.partner_notifications where partner_user_id=$1 order by created_at desc limit 5`,[userId]),
+        (select coalesce(sum(amount),0) from public.partner_payouts where partner_user_id=$1 and status in ('pending','processing')) pending_payout`,[userId],userId),
+      this.optionalDashboardQuery('recentDeliveries', `select id,order_id,status,assigned_at,completed_at from public.delivery_assignments where partner_user_id=$1 order by assigned_at desc limit 5`,[userId],userId),
+      this.optionalDashboardQuery('notifications', `select id,type,title,message,read_at,created_at from public.partner_notifications where partner_user_id=$1 order by created_at desc limit 5`,[userId],userId),
     ]);
     if(!profile.rowCount) throw new NotFoundException('Partner profile is not provisioned');
-    return{profile:profile.rows[0],activeAssignment:active.rows[0]??null,summary:summary.rows[0],recentDeliveries:recent.rows,notifications:notices.rows};
+    const unavailable = [
+      active.failed ? 'activeAssignment' : null,
+      summary.failed ? 'summary' : null,
+      recent.failed ? 'recentDeliveries' : null,
+      notices.failed ? 'notifications' : null,
+    ].filter((section): section is string => section !== null);
+    return{
+      profile:profile.rows[0],
+      activeAssignment:active.rows[0]??null,
+      summary:summary.rows[0]??{today_completed:null,today_earnings:null,pending_earnings:null,pending_payout:null},
+      recentDeliveries:recent.rows,
+      notifications:notices.rows,
+      unavailable,
+    };
   }
   async setAvailability(userId:string,dto:AvailabilityDto){
     const result=await this.db.query(`update public.partner_availability set is_online=$1,version=version+1,updated_at=now()
@@ -36,7 +52,7 @@ export class RiderService {
     coalesce(e.base_amount+e.incentive_amount+e.adjustment_amount,0) earnings from public.delivery_assignments a left join public.partner_earnings e on e.assignment_id=a.id
     where a.partner_user_id=$1 and a.id<$2 and ($3::text is null or a.status=$3) order by a.id desc limit $4`,[userId,cursor,q.status??null,q.limit+1]);return this.page(result.rows,q.limit);}
   async detail(userId:string,id:number){const result=await this.db.query(`select a.*,o.delivery_address,o.status order_status,
-    jsonb_agg(jsonb_build_object('name',oi.product_name,'quantity',oi.quantity) order by oi.id) filter(where oi.id is not null) items
+    coalesce(jsonb_agg(jsonb_build_object('name',oi.product_name,'quantity',oi.quantity) order by oi.id) filter(where oi.id is not null),'[]'::jsonb) items
     from public.delivery_assignments a join public.orders o on o.id=a.order_id left join public.order_items oi on oi.order_id=o.id
     where a.id=$1 and a.partner_user_id=$2 group by a.id,o.id`,[id,userId]);if(!result.rowCount)throw new NotFoundException('Assigned delivery not found');return result.rows[0];}
   action(userId:string,id:number,target:string,dto:DeliveryActionDto){return this.db.transaction(async client=>{
@@ -71,4 +87,13 @@ export class RiderService {
   private async verifyOtp(client:any,id:number,otp?:string,key?:string){if(!key)throw new UnprocessableEntityException('Idempotency key is required');const v=await client.query('select otp_hash,failed_attempts,expires_at,verified_at from public.delivery_verifications where assignment_id=$1 for update',[id]);if(!v.rowCount)throw new UnprocessableEntityException('Delivery verification is not configured for this assignment');if(v.rows[0].verified_at)return;if(v.rows[0].failed_attempts>=5)throw new HttpException('Too many verification attempts',HttpStatus.TOO_MANY_REQUESTS);if(new Date(v.rows[0].expires_at)<new Date())throw new UnprocessableEntityException('Delivery verification code expired');const actual=createHash('sha256').update(otp??'').digest();const expected=Buffer.from(v.rows[0].otp_hash,'hex');if(actual.length!==expected.length||!timingSafeEqual(actual,expected)){await client.query('update public.delivery_verifications set failed_attempts=failed_attempts+1 where assignment_id=$1',[id]);throw new UnprocessableEntityException('Invalid delivery verification code');}await client.query('update public.delivery_verifications set verified_at=now() where assignment_id=$1',[id]);}
   private cursor(v?:string){const n=v?Number(v):Number.MAX_SAFE_INTEGER;if(!Number.isSafeInteger(n)||n<1)throw new UnprocessableEntityException('Invalid cursor');return n;}
   private page(rows:any[],limit:number){const more=rows.length>limit;const items=more?rows.slice(0,limit):rows;return{items,nextCursor:more?String(items[items.length-1].id):null};}
+  private async optionalDashboardQuery(section:string,text:string,values:unknown[],userId:string){
+    try{
+      const result=await this.db.query<QueryResultRow>(text,values);
+      return{rows:result.rows,failed:false};
+    }catch(error){
+      this.logger.error(`Failed to load delivery dashboard section "${section}" for partner ${userId}`,error instanceof Error?error.stack:String(error));
+      return{rows:[],failed:true};
+    }
+  }
 }

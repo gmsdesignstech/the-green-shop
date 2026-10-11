@@ -58,6 +58,7 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.AppScreen
 import com.example.viewmodel.AuthViewModel
 import com.example.viewmodel.GreenShopViewModel
+import com.example.data.auth.SupabaseAuthRepository
 import com.example.data.applications.ApplicationRepository
 import com.example.data.applications.ApplicationApiException
 import kotlinx.coroutines.launch
@@ -68,7 +69,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val greenShopViewModel: GreenShopViewModel = viewModel()
-            val authViewModel: AuthViewModel = viewModel()
+            val authViewModel: AuthViewModel = viewModel {
+                AuthViewModel(SupabaseAuthRepository(applicationContext))
+            }
             val isDark by greenShopViewModel.isDarkMode.collectAsState()
             val authState by authViewModel.uiState.collectAsState()
             // Customer phone login is the primary entry point. Staff can still reach the

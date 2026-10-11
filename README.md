@@ -22,10 +22,11 @@ View your app in AI Studio: https://ai.studio/apps/77df8be5-1ffa-43b8-a1f6-69c2d
 5. Set `MAPS_API_KEY` in `.env` to an Android-restricted Google Maps Platform key. Enable the
    **Maps SDK for Android** for that Google Cloud project and restrict the key to this app's
    package name and SHA-1 signing certificate.
-6. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-7. Run the app on an emulator or physical device. In checkout, tap the delivery-address card to
+6. Run the app on an emulator or physical device. In checkout, tap the delivery-address card to
    open the map picker, move the pin, review the resolved address, and confirm it.
-8. If you have already published your app in AI Studio, please [request upload key reset](https://support.google.com/googleplay/android-developer/answer/9842756#zippy=%2Crequest-an-upload-key-reset) in Google Play Console.
+7. For release signing and deployment, follow [`docs/render-deployment.md`](docs/render-deployment.md).
+   Never commit `key.properties`, a keystore, or signing passwords. If the app is already published,
+   reuse its existing upload key or follow Google Play's upload-key reset process.
 
 The production API contract still required by catalog, checkout, admin, and rider features is
 documented in [`docs/backend-contract.md`](docs/backend-contract.md).

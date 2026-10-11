@@ -1,6 +1,18 @@
-import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { AssignPartnerDto, CategoryDto, InventoryAdjustmentDto, OrderStatusDto, PageQueryDto, ProductDto, PromotionDto } from './dto';
+import type { QueryResultRow } from 'pg';
+
+type DashboardMetricRow = QueryResultRow & {
+  today_orders: number;
+  pending_orders: number;
+  completed_orders: number;
+  gross_sales: string;
+  payment_failures: number;
+  active_deliveries: number;
+};
+type LowStockDashboardRow = QueryResultRow & { total_count: number };
+type PendingApplicationsDashboardRow = QueryResultRow & { count: number };
 
 const transitions: Record<string, string[]> = {
   placed: ['confirmed', 'cancelled'], confirmed: ['preparing', 'cancelled'],
@@ -10,32 +22,80 @@ const transitions: Record<string, string[]> = {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(private readonly db: DatabaseService) {}
 
   async dashboard(from?: string, to?: string) {
     const range = this.range(from, to);
-    const [metrics, sales, recent, best, low, activity] = await Promise.all([
-      this.db.query(`select count(*) filter (where created_at::date=current_date)::int today_orders,
-        count(*) filter (where status in ('placed','confirmed','preparing'))::int pending_orders,
+    const [metrics, sales, recent, best, low, activity, pending] = await Promise.all([
+      this.dashboardRows<DashboardMetricRow>('metrics', `select count(*) filter (where created_at::date=current_date)::int today_orders,
+        count(*) filter (where status in ('pending_payment','placed','confirmed','preparing'))::int pending_orders,
         count(*) filter (where status='delivered')::int completed_orders,
-        coalesce(sum(total) filter (where payment_status='successful'),0) gross_sales,
+        coalesce(sum(total) filter (where payment_status='captured'),0) gross_sales,
         count(*) filter (where payment_status='failed')::int payment_failures,
         count(*) filter (where status in ('rider_assigned','out_for_delivery'))::int active_deliveries
         from public.orders where created_at >= $1 and created_at < $2`, range),
-      this.db.query(`select date_trunc('day',created_at)::date day, coalesce(sum(total),0) gross_sales
-        from public.orders where payment_status='successful' and created_at >= $1 and created_at < $2
+      this.dashboardRows('sales', `select date_trunc('day',created_at)::date as "day", coalesce(sum(total),0) gross_sales
+        from public.orders where payment_status='captured' and created_at >= $1 and created_at < $2
         group by 1 order by 1`, range),
-      this.db.query(`select id,status,payment_status,total,created_at from public.orders order by created_at desc limit 8`),
-      this.db.query(`select oi.product_id,oi.product_name,sum(oi.quantity)::int quantity
+      this.dashboardRows('recentOrders', `select id,status,payment_status,total,created_at from public.orders order by created_at desc limit 8`),
+      this.dashboardRows('bestSellingProducts', `select oi.product_id,oi.product_name,sum(oi.quantity)::int quantity
         from public.order_items oi join public.orders o on o.id=oi.order_id where o.status<>'cancelled' and o.created_at >= $1 and o.created_at < $2
         group by oi.product_id,oi.product_name order by quantity desc limit 5`, range),
-      this.db.query(`select p.id,p.name,i.on_hand,i.reserved,(i.on_hand-i.reserved) available,i.low_stock_threshold
+      this.dashboardRows<LowStockDashboardRow>('lowStock', `select p.id,p.name,i.on_hand,i.reserved,(i.on_hand-i.reserved) available,i.low_stock_threshold,
+          count(*) over()::int total_count
         from public.inventory i join public.products p on p.id=i.product_id
         where not p.is_archived and i.on_hand-i.reserved <= i.low_stock_threshold order by available asc limit 10`),
-      this.db.query(`select action,target_type,target_id,created_at from public.audit_logs order by created_at desc limit 8`),
+      this.dashboardRows('recentActivity', `select action,target_type,target_id,created_at from public.audit_logs order by created_at desc limit 8`),
+      this.dashboardRows<PendingApplicationsDashboardRow>('pendingPartnerApplications', "select count(*)::int count from public.delivery_partner_applications where status in ('pending','under_review')"),
     ]);
-    const pending = await this.db.query("select count(*)::int count from public.delivery_partner_applications where status in ('pending','under_review')");
-    return { metrics: { ...metrics.rows[0], low_stock_products: low.rowCount, pending_partner_applications: pending.rows[0].count }, sales: sales.rows, recentOrders: recent.rows, bestSellingProducts: best.rows, lowStock: low.rows, recentActivity: activity.rows };
+    const unavailable = [
+      metrics.failed || !metrics.rows[0] ? 'metrics' : null,
+      sales.failed ? 'sales' : null,
+      recent.failed ? 'recentOrders' : null,
+      best.failed ? 'bestSellingProducts' : null,
+      low.failed ? 'lowStock' : null,
+      activity.failed ? 'recentActivity' : null,
+      pending.failed || !pending.rows[0] ? 'pendingPartnerApplications' : null,
+    ].filter((section): section is string => section !== null);
+    return {
+      metrics: {
+        ...(metrics.rows[0] ?? {
+          today_orders: null,
+          pending_orders: null,
+          completed_orders: null,
+          gross_sales: null,
+          payment_failures: null,
+          active_deliveries: null,
+        }),
+        low_stock_products: low.failed ? null : Number(low.rows[0]?.total_count ?? 0),
+        pending_partner_applications: pending.failed ? null : Number(pending.rows[0]?.count ?? 0),
+      },
+      sales: sales.rows,
+      recentOrders: recent.rows,
+      bestSellingProducts: best.rows,
+      lowStock: low.rows,
+      recentActivity: activity.rows,
+      unavailable,
+    };
+  }
+
+  private async dashboardRows<T extends QueryResultRow>(
+    section: string,
+    query: string,
+    values: unknown[] = [],
+  ): Promise<{ rows: T[]; failed: boolean }> {
+    try {
+      const result = await this.db.query<T>(query, values);
+      return { rows: result.rows, failed: false };
+    } catch (error) {
+      this.logger.error(
+        `Admin dashboard query failed (${section})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return { rows: [], failed: true };
+    }
   }
 
   async products(q: PageQueryDto) {

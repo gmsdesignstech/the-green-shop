@@ -137,7 +137,7 @@ class AuthViewModelTest {
 
         assertFalse(viewModel.uiState.value.isAuthenticated)
         assertEquals(
-            "The development authentication server is not running. Start the NestJS backend and retry.",
+            "Couldn't reach the development API. Check this build's API_BASE_URL, make sure the phone and computer are on the same Wi-Fi, and allow port 3000 through the computer's firewall.",
             viewModel.uiState.value.errorMessage
         )
     }

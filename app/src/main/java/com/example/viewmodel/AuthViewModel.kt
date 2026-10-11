@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.auth.AuthRepository
 import com.example.data.auth.AuthenticatedUser
-import com.example.data.auth.SupabaseAuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +28,7 @@ data class AuthUiState(
 )
 
 class AuthViewModel(
-    private val repository: AuthRepository = SupabaseAuthRepository()
+    private val repository: AuthRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         AuthUiState(
@@ -181,9 +180,12 @@ internal object AuthErrorMapper {
         "no development test phone" in message ->
             "No development test phone is configured for this login role."
         "authentication server unreachable" in message ->
-            "The development authentication server is not running. Start the NestJS backend and retry."
+            "Couldn't reach the development API. Check this build's API_BASE_URL, make sure the phone and computer are on the same Wi-Fi, and allow port 3000 through the computer's firewall."
         "development authentication is disabled" in message ->
             "Development OTP is disabled on the authentication server."
+        "internal server error" in message || "http 500" in message || "http 502" in message ||
+            "http 503" in message ->
+            "The development API returned a server error. Retry in a moment; if it continues, check the NestJS logs."
         "sms provider" in message || "unsupported phone provider" in message ||
             "error sending confirmation otp" in message ->
             "Phone verification is temporarily unavailable. Please contact support."

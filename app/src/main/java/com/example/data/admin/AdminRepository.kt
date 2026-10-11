@@ -12,7 +12,12 @@ import java.util.concurrent.TimeUnit
 
 data class AdminMetric(val label: String, val value: String)
 data class AdminRow(val id: String, val title: String, val subtitle: String, val status: String? = null)
-data class AdminDashboard(val metrics: List<AdminMetric>, val recentOrders: List<AdminRow>, val lowStock: List<AdminRow>)
+data class AdminDashboard(
+    val metrics: List<AdminMetric>,
+    val recentOrders: List<AdminRow>,
+    val lowStock: List<AdminRow>,
+    val unavailableSections: Set<String> = emptySet()
+)
 class AdminApiException(val statusCode: Int, message: String) : IllegalStateException(message)
 
 class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
@@ -21,27 +26,8 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
     val isConfigured = (baseUrl.startsWith("https://") || (BuildConfig.DEBUG && baseUrl.startsWith("http://"))) &&
         !baseUrl.contains("YOUR_API_HOST")
 
-    suspend fun dashboard(token: String): Result<AdminDashboard> = get("admin/dashboard", token) { json ->
-        val m = json.getJSONObject("metrics")
-        AdminDashboard(
-            metrics = listOf(
-                AdminMetric("Today’s orders", m.optInt("today_orders").toString()),
-                AdminMetric("Pending", m.optInt("pending_orders").toString()),
-                AdminMetric("Completed", m.optInt("completed_orders").toString()),
-                AdminMetric("Gross sales", "₹${m.optString("gross_sales", "0")}"),
-                AdminMetric("Payment failures", m.optInt("payment_failures").toString()),
-                AdminMetric("Active deliveries", m.optInt("active_deliveries").toString()),
-                AdminMetric("Low stock", m.optInt("low_stock_products").toString()),
-                AdminMetric("Partner applications", m.optInt("pending_partner_applications").toString())
-            ),
-            recentOrders = json.optJSONArray("recentOrders").toRows { item ->
-                AdminRow(item.optString("id"), "Order #${item.optString("id")}", "₹${item.optString("total")} • ${item.optString("payment_status")}", item.optString("status"))
-            },
-            lowStock = json.optJSONArray("lowStock").toRows { item ->
-                AdminRow(item.optString("id"), item.optString("name"), "${item.optInt("available")} available • threshold ${item.optInt("low_stock_threshold")}", "LOW STOCK")
-            }
-        )
-    }
+    suspend fun dashboard(token: String): Result<AdminDashboard> =
+        get("admin/dashboard", token, ::parseAdminDashboard)
 
     suspend fun list(section: String, token: String, search: String = ""): Result<List<AdminRow>> {
         val path = when (section) {
@@ -100,7 +86,42 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
     }
 }
 
+internal fun parseAdminDashboard(json: JSONObject): AdminDashboard {
+    val metrics = json.optJSONObject("metrics") ?: JSONObject()
+    val unavailable = json.optJSONArray("unavailable").toStringSet()
+    fun metric(label: String, key: String, section: String = "metrics"): AdminMetric {
+        val value = if (section in unavailable) "—" else {
+            metrics.optString(key, "0").takeIf { it.isNotBlank() && it != "null" } ?: "0"
+        }
+        return AdminMetric(label, if (key == "gross_sales" && value != "—") "₹$value" else value)
+    }
+    return AdminDashboard(
+        metrics = listOf(
+            metric("Today’s orders", "today_orders"),
+            metric("Pending", "pending_orders"),
+            metric("Completed", "completed_orders"),
+            metric("Gross sales", "gross_sales"),
+            metric("Payment failures", "payment_failures"),
+            metric("Active deliveries", "active_deliveries"),
+            metric("Low stock", "low_stock_products", "lowStock"),
+            metric("Partner applications", "pending_partner_applications", "pendingPartnerApplications")
+        ),
+        recentOrders = json.optJSONArray("recentOrders").toRows { item ->
+            AdminRow(item.optString("id"), "Order #${item.optString("id")}", "₹${item.optString("total")} • ${item.optString("payment_status")}", item.optString("status"))
+        },
+        lowStock = json.optJSONArray("lowStock").toRows { item ->
+            AdminRow(item.optString("id"), item.optString("name"), "${item.optInt("available")} available • threshold ${item.optInt("low_stock_threshold")}", "LOW STOCK")
+        },
+        unavailableSections = unavailable
+    )
+}
+
 private fun JSONArray?.toRows(mapper: (JSONObject) -> AdminRow): List<AdminRow> {
     if (this == null) return emptyList()
     return (0 until length()).map { mapper(getJSONObject(it)) }
+}
+
+private fun JSONArray?.toStringSet(): Set<String> {
+    if (this == null) return emptySet()
+    return (0 until length()).mapNotNull { index -> optString(index).takeIf(String::isNotBlank) }.toSet()
 }

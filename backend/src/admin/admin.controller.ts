@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, Logger, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard, AuthenticatedRequest } from '../auth/auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
@@ -7,8 +7,19 @@ import { ArchiveProductDto, AssignPartnerDto, CategoryDto, InventoryAdjustmentDt
 @Controller('admin')
 @UseGuards(AuthGuard, AdminGuard)
 export class AdminController {
+  private readonly logger = new Logger(AdminController.name);
+
   constructor(private readonly service: AdminService) {}
-  @Get('dashboard') dashboard(@Query('from') from?:string,@Query('to') to?:string){return this.service.dashboard(from,to);}
+  @Get('dashboard') async dashboard(@Query('from') from?:string,@Query('to') to?:string){
+    try {
+      return await this.service.dashboard(from,to);
+    } catch(error) {
+      if (!(error instanceof HttpException) || error.getStatus() >= 500) {
+        this.logger.error('Failed to load admin dashboard',error instanceof Error?error.stack:String(error));
+      }
+      throw error;
+    }
+  }
   @Get('products') products(@Query() q:PageQueryDto){return this.service.products(q);}
   @Post('products') createProduct(@Req() r:AuthenticatedRequest,@Body() d:ProductDto){return this.service.createProduct(r.user.id,d);}
   @Patch('products/:id') updateProduct(@Req() r:AuthenticatedRequest,@Param('id',ParseIntPipe) id:number,@Body() d:ProductDto){return this.service.updateProduct(r.user.id,id,d);}

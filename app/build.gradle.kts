@@ -48,6 +48,30 @@ val developmentAdminPhone = localConfig("DEV_ADMIN_TEST_PHONE_NUMBER")
 val developmentPartnerPhone = localConfig("DEV_DELIVERY_PARTNER_TEST_PHONE_NUMBER")
 val localFixedOtpEnabled = localConfig("DEV_FIXED_OTP_ENABLED").equals("true", ignoreCase = true)
 val isReleaseInvocation = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+val releaseSigningProperties = Properties().apply {
+  val file = rootProject.file("key.properties")
+  if (file.exists()) file.inputStream().use(::load)
+}
+fun releaseSigningValue(property: String, environment: String): String =
+  releaseSigningProperties.getProperty(property)
+    ?: providers.environmentVariable(environment).orNull.orEmpty()
+val releaseKeystorePath = releaseSigningValue("storeFile", "KEYSTORE_PATH")
+val releaseStorePassword = releaseSigningValue("storePassword", "STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("keyAlias", "KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("keyPassword", "KEY_PASSWORD")
+if (isReleaseInvocation) {
+  val missing = buildList {
+    if (releaseKeystorePath.isBlank()) add("storeFile/KEYSTORE_PATH")
+    if (releaseStorePassword.isBlank()) add("storePassword/STORE_PASSWORD")
+    if (releaseKeyAlias.isBlank()) add("keyAlias/KEY_ALIAS")
+    if (releaseKeyPassword.isBlank()) add("keyPassword/KEY_PASSWORD")
+  }
+  if (missing.isNotEmpty()) {
+    throw GradleException("Release signing is not configured. Missing: ${missing.joinToString()}. Configure ignored key.properties or signing environment variables.")
+  }
+  val keystore = rootProject.file(releaseKeystorePath)
+  if (!keystore.isFile) throw GradleException("Release keystore does not exist: ${keystore.absolutePath}")
+}
 val releaseApiBaseUrl = providers.gradleProperty("API_BASE_URL").orNull
   ?: providers.environmentVariable("API_BASE_URL").orNull
   ?: localEnvironment.getProperty("API_BASE_URL").orEmpty()
@@ -82,11 +106,10 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      if (releaseKeystorePath.isNotBlank()) storeFile = rootProject.file(releaseKeystorePath)
+      storePassword = releaseStorePassword
+      keyAlias = releaseKeyAlias
+      keyPassword = releaseKeyPassword
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
