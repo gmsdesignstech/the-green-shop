@@ -8,10 +8,12 @@ describe('database configuration', () => {
       .toThrow('DATABASE_URL must include a PostgreSQL host, database, username and password');
   });
 
-  it('requires verified TLS in production and accepts a multiline hosted CA', () => {
+  it('defaults to verified TLS in production, rejects opt-out and accepts a multiline hosted CA', () => {
     const url = 'postgresql://user:password@db.example.com:5432/postgres';
-    expect(() => databasePoolConfig({ NODE_ENV: 'production', DATABASE_URL: url }))
-      .toThrow('DATABASE_SSL=true is required in production');
+    expect(databasePoolConfig({ NODE_ENV: 'production', DATABASE_URL: url }).ssl)
+      .toEqual({ rejectUnauthorized: true });
+    expect(() => databasePoolConfig({ NODE_ENV: 'production', DATABASE_SSL: 'false', DATABASE_URL: url }))
+      .toThrow('DATABASE_SSL cannot be disabled in production');
     const config = databasePoolConfig({
       NODE_ENV: 'production', DATABASE_SSL: 'true', DATABASE_URL: url,
       DATABASE_SSL_CA: '-----BEGIN CERTIFICATE-----\\nexample\\n-----END CERTIFICATE-----',

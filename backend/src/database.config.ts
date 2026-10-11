@@ -23,10 +23,11 @@ export function databasePoolConfig(env: NodeJS.ProcessEnv = process.env): PoolCo
     throw new Error('DATABASE_URL must include a PostgreSQL host, database, username and password');
   }
 
-  const sslEnabled = env.DATABASE_SSL === 'true';
-  if (env.NODE_ENV === 'production' && !sslEnabled) {
-    throw new Error('DATABASE_SSL=true is required in production');
+  const isProduction = env.NODE_ENV === 'production';
+  if (isProduction && env.DATABASE_SSL === 'false') {
+    throw new Error('DATABASE_SSL cannot be disabled in production');
   }
+  const sslEnabled = isProduction || env.DATABASE_SSL === 'true';
   const inlineCa = env.DATABASE_SSL_CA?.replace(/\\n/g, '\n').trim();
   const caPath = env.DATABASE_SSL_CA_PATH?.trim();
   const ca = inlineCa || (caPath ? readFileSync(caPath, 'utf8') : undefined);
