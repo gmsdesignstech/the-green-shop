@@ -9,7 +9,6 @@ import com.example.model.Order
 import com.example.model.OrderStatus
 import com.example.model.Product
 import com.example.model.RecipeItem
-import com.example.model.WalletTransaction
 
 object SampleData {
 
@@ -612,12 +611,6 @@ object SampleData {
             locality = "Outer Ring Road, Bellandur, Bengaluru - 560103",
             isDefault = false
         )
-    )
-
-    val walletTransactions = listOf(
-        WalletTransaction("tx_1", "Added to THE GREEN SHOP Money", 500.0, true, "Yesterday", "UPI • HDFC Bank"),
-        WalletTransaction("tx_2", "Paid for Fresh Veggie Order #GS-98214", 95.0, false, "2 days ago", "Farm Produce Delivered"),
-        WalletTransaction("tx_3", "Cashback: Organic Sunday Promo", 50.0, true, "4 days ago", "Promotional cashback")
     )
 
     val recipes = listOf(

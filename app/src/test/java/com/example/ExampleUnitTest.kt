@@ -3,21 +3,13 @@ package com.example
 import com.example.data.SampleData
 import com.example.viewmodel.GreenShopViewModel
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExampleUnitTest {
     @Test
-    fun testGreenShopCartAndWallet() {
+    fun testGreenShopCart() {
         val viewModel = GreenShopViewModel()
-        val initialBalance = viewModel.walletBalance.value
-        assertEquals(250.0, initialBalance, 0.01)
-
-        // Add 500 to wallet
-        viewModel.addMoneyToWallet(500.0)
-        assertEquals(750.0, viewModel.walletBalance.value, 0.01)
-
         // Test Cart operations directly on state with fresh tomatoes
         val tomato = SampleData.products.first { it.id == "p_tomato" }
         viewModel.clearCart()
@@ -27,11 +19,7 @@ class ExampleUnitTest {
         assertEquals(1, viewModel.cartItems.value.size)
         assertEquals(1, viewModel.getProductQuantity(tomato.id))
 
-        // Test placing order
-        val order = viewModel.placeOrder(tipAmount = 10.0, useWallet = true)
-        assertNotNull(order)
-        assertTrue(order.id.startsWith("GS-"))
-        assertEquals(0, viewModel.cartItems.value.size)
+        // Checkout is deliberately excluded: totals and order IDs must come from the backend.
     }
 
     @Test

@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { SignJWT, jwtVerify } from 'jose';
 
 type LoginRole = 'customer' | 'admin' | 'delivery_partner';
@@ -12,6 +12,7 @@ type DevSession = {
   expiresAt: number;
   revoked: boolean;
 };
+type FailedAttempt = { count: number; windowEndsAt: number; lockedUntil?: number };
 
 export const DEVELOPMENT_USER_IDS: Record<LoginRole, string> = {
   customer: '00000000-0000-4000-8000-000000000001',
@@ -26,6 +27,9 @@ export class DevAuthService {
   private readonly secret = new TextEncoder().encode(process.env.DEV_AUTH_JWT_SECRET ?? '');
   private readonly issuer = 'the-green-shop-dev-auth';
   private readonly sessions = new Map<string, DevSession>();
+  private readonly failedAttempts = new Map<string, FailedAttempt>();
+  private readonly maxAttempts = 5;
+  private readonly attemptWindowMs = 15 * 60 * 1000;
 
   constructor() {
     if (process.env.DEV_OTP_ENABLED === 'true' && process.env.NODE_ENV !== 'development') {
@@ -35,6 +39,10 @@ export class DevAuthService {
     if (this.enabled) {
       const otp = process.env.DEV_OTP_CODE ?? '';
       if (!/^\d{6}$/.test(otp)) throw new Error('DEV_OTP_CODE must contain exactly 6 digits');
+      const validUntil = process.env.DEV_OTP_VALID_UNTIL;
+      if (validUntil && Number.isNaN(Date.parse(validUntil))) {
+        throw new Error('DEV_OTP_VALID_UNTIL must be a valid ISO-8601 timestamp');
+      }
       for (const name of [
         'DEV_CUSTOMER_TEST_PHONE_NUMBER',
         'DEV_ADMIN_TEST_PHONE_NUMBER',
@@ -50,7 +58,14 @@ export class DevAuthService {
   async login(phone: string, otp: string, role: LoginRole) {
     this.requireEnabled();
     if (phone !== this.allowedPhone(role)) throw new ForbiddenException('This phone number is not authorized for development login');
-    if (!this.safeOtpMatch(otp)) throw new UnauthorizedException('Invalid development OTP');
+    this.requireOtpNotExpired();
+    const attemptKey = `${role}:${phone}`;
+    this.requireNotLocked(attemptKey);
+    if (!this.safeOtpMatch(otp)) {
+      this.recordFailedAttempt(attemptKey);
+      throw new UnauthorizedException('Invalid development OTP');
+    }
+    this.failedAttempts.delete(attemptKey);
     return this.issueSession(DEVELOPMENT_USER_IDS[role], phone, role);
   }
 
@@ -93,6 +108,11 @@ export class DevAuthService {
   }
 
   private async issueSession(userId: string, phone: string, role: LoginRole) {
+    // A repeated successful login replaces the previous session instead of
+    // accumulating parallel sessions for the same isolated test identity.
+    for (const session of this.sessions.values()) {
+      if (session.userId === userId && session.role === role) session.revoked = true;
+    }
     const id = randomUUID();
     const refreshToken = randomBytes(32).toString('base64url');
     this.sessions.set(id, {
@@ -131,6 +151,35 @@ export class DevAuthService {
   private safeOtpMatch(value: string) {
     const expected = process.env.DEV_OTP_CODE ?? '';
     if (value.length !== expected.length) return false;
-    return this.hash(value) === this.hash(expected);
+    return timingSafeEqual(Buffer.from(this.hash(value), 'hex'), Buffer.from(this.hash(expected), 'hex'));
+  }
+
+  private requireOtpNotExpired() {
+    const validUntil = process.env.DEV_OTP_VALID_UNTIL;
+    if (validUntil && Date.parse(validUntil) <= Date.now()) {
+      throw new ForbiddenException('Development OTP has expired');
+    }
+  }
+
+  private requireNotLocked(key: string) {
+    const attempt = this.failedAttempts.get(key);
+    if (!attempt) return;
+    if (attempt.windowEndsAt <= Date.now()) {
+      this.failedAttempts.delete(key);
+      return;
+    }
+    if (attempt.lockedUntil && attempt.lockedUntil > Date.now()) {
+      throw new UnauthorizedException('Too many development OTP attempts');
+    }
+  }
+
+  private recordFailedAttempt(key: string) {
+    const now = Date.now();
+    const current = this.failedAttempts.get(key);
+    const attempt: FailedAttempt = !current || current.windowEndsAt <= now
+      ? { count: 1, windowEndsAt: now + this.attemptWindowMs }
+      : { ...current, count: current.count + 1 };
+    if (attempt.count >= this.maxAttempts) attempt.lockedUntil = attempt.windowEndsAt;
+    this.failedAttempts.set(key, attempt);
   }
 }

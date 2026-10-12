@@ -3,23 +3,28 @@ package com.example.ui.theme
 import androidx.compose.ui.unit.dp
 
 object GreenShopSpacing {
+    val micro = 2.dp
     val xxs = 4.dp
     val xs = 8.dp
     val sm = 12.dp
     val md = 16.dp
     val lg = 24.dp
     val xl = 32.dp
+    val xxl = 40.dp
 }
 
 object GreenShopRadius {
     val control = 12.dp
     val card = 18.dp
     val prominent = 24.dp
+    val hero = 28.dp
     val pill = 100.dp
 }
 
 object GreenShopElevation {
+    val flat = 0.dp
     val resting = 1.dp
+    val floating = 3.dp
     val raised = 6.dp
 }
 

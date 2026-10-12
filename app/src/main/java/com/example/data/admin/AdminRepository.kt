@@ -49,6 +49,14 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
             }
         }
 
+    suspend fun reviewDeliveryPartner(token: String, applicationId: String, status: String, reason: String): Result<Unit> =
+        mutate(
+            path = "admin/applications/delivery_partner/$applicationId",
+            token = token,
+            method = "PATCH",
+            body = JSONObject().put("status", status).put("reason", reason)
+        )
+
     suspend fun list(section: String, token: String, search: String = ""): Result<List<AdminRow>> {
         val path = when (section) {
             "Orders" -> "admin/orders"
@@ -101,6 +109,24 @@ class AdminRepository(private val client: OkHttpClient = OkHttpClient.Builder()
     }
 
     private suspend fun <T> get(path: String, token: String, parse: (JSONObject) -> T) = request("$baseUrl/$path", token, parse)
+    private suspend fun mutate(path: String, token: String, method: String, body: JSONObject): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext Result.failure(IllegalStateException("Set API_BASE_URL to the deployed HTTPS backend."))
+        runCatching {
+            val builder = Request.Builder().url("$baseUrl/$path").header("Authorization", "Bearer $token")
+            val payload = body.toString().toRequestBody("application/json".toMediaType())
+            val request = when (method) {
+                "PATCH" -> builder.patch(payload).build()
+                else -> builder.post(payload).build()
+            }
+            client.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    val message = runCatching { JSONObject(raw).optString("message") }.getOrNull().orEmpty()
+                    throw AdminApiException(response.code, message.ifBlank { "Administrative action failed (${response.code})." })
+                }
+            }
+        }
+    }
     private suspend fun <T> request(url: String, token: String, parse: (JSONObject) -> T): Result<T> = withContext(Dispatchers.IO) {
         if (!isConfigured) return@withContext Result.failure(IllegalStateException("Set API_BASE_URL to the deployed HTTPS backend."))
         runCatching {

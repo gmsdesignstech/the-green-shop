@@ -196,7 +196,7 @@ fun OrderTrackingScreen(
                             Text(text = "⚡", fontSize = 24.sp)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Arriving in ${order.etaMinutes} minutes",
+                                text = order.etaMinutes?.let { "Arriving in $it minutes" } ?: order.status.label,
                                 fontSize = 22.sp,
                                 fontWeight = FontWeight.Black,
                                 color = GreenShopDarkGreen
@@ -223,34 +223,25 @@ fun OrderTrackingScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Delivery OTP Pill
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(GreenShopYellowLight)
-                                .border(1.dp, Color(0xFFFFD54F), RoundedCornerShape(24.dp))
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Share OTP with rider: ",
-                                fontSize = 12.sp,
-                                color = GreenShopDarkText
-                            )
-                            Text(
-                                text = order.deliveryOtp,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 2.sp,
-                                color = GreenShopDarkGreen
-                            )
+                        order.deliveryOtp?.takeIf(String::isNotBlank)?.let { otp ->
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(GreenShopYellowLight)
+                                    .border(1.dp, Color(0xFFFFD54F), RoundedCornerShape(24.dp))
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Share OTP with rider: ", fontSize = 12.sp, color = GreenShopDarkText)
+                                Text(otp, fontSize = 16.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = GreenShopDarkGreen)
+                            }
                         }
                     }
                 }
             }
 
-            // Rider Contact Card
-            item {
+            // Rider details are shown only after the backend has assigned a real partner.
+            order.riderName?.takeIf(String::isNotBlank)?.let { riderName -> item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -279,12 +270,12 @@ fun OrderTrackingScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = order.riderName,
+                                    text = riderName,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = order.riderVehicle,
+                                    text = order.riderVehicle.orEmpty(),
                                     fontSize = 11.sp,
                                     color = GreenShopMutedText
                                 )
@@ -308,7 +299,7 @@ fun OrderTrackingScreen(
                         }
                     }
                 }
-            }
+            } }
 
             // Delivery Status Timeline
             item {

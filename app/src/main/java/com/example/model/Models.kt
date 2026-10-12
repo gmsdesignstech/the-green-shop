@@ -2,9 +2,13 @@ package com.example.model
 
 enum class OrderStatus(val label: String, val icon: String) {
     PLACED("Order Placed", "📝"),
+    CONFIRMED("Confirmed", "✅"),
+    PREPARING("Being prepared", "🧺"),
     PACKED("Packed at Green Dark Store", "📦"),
     ON_THE_WAY("Out for Delivery", "🛵"),
-    DELIVERED("Delivered", "✅")
+    DELIVERED("Delivered", "✅"),
+    CANCELLED("Cancelled", "✕"),
+    REFUNDED("Refunded", "↩")
 }
 
 data class Product(
@@ -15,16 +19,32 @@ data class Product(
     val price: Double,
     val originalPrice: Double,
     val unit: String,
-    val deliveryMinutes: Int = 10,
-    val rating: Float = 4.8f,
-    val ratingCount: Int = 142,
+    val deliveryMinutes: Int = Int.MAX_VALUE,
+    val rating: Float = 0f,
+    val ratingCount: Int = 0,
     val discountPercent: Int = 0,
     val emoji: String = "🥬",
-    val description: String = "Farm-fresh quality handpicked daily.",
+    val description: String = "",
     val badge: String? = null,
     val isOrganic: Boolean = false,
     val inStock: Boolean = true,
+    val availableQuantity: Int = if (inStock) Int.MAX_VALUE else 0,
     val imageUrl: String? = null
+)
+
+data class Promotion(
+    val id: String,
+    val title: String,
+    val description: String,
+    val code: String?,
+    val discountType: String,
+    val discountValue: Double,
+    val minimumOrderValue: Double?,
+    val maximumDiscount: Double?,
+    val expiresAt: String?,
+    val terms: String?,
+    val festivalName: String?,
+    val firstOrderOnly: Boolean
 )
 
 data class CartItem(
@@ -75,11 +95,11 @@ data class Order(
     val placedTime: String,
     val status: OrderStatus,
     val deliveryAddress: String,
-    val etaMinutes: Int = 11,
-    val deliveryOtp: String = "4829",
-    val riderName: String = "Ramesh Kumar",
-    val riderPhone: String = "+91 98765 01234",
-    val riderVehicle: String = "Green Scooter • KA-05-EV-1904"
+    val etaMinutes: Int? = null,
+    val deliveryOtp: String? = null,
+    val riderName: String? = null,
+    val riderPhone: String? = null,
+    val riderVehicle: String? = null
 )
 
 data class AddressItem(
@@ -90,15 +110,6 @@ data class AddressItem(
     val isDefault: Boolean = false,
     val latitude: Double? = null,
     val longitude: Double? = null
-)
-
-data class WalletTransaction(
-    val id: String,
-    val title: String,
-    val amount: Double,
-    val isCredit: Boolean,
-    val timeAgo: String,
-    val note: String
 )
 
 data class RecipeItem(

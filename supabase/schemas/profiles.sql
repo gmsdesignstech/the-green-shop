@@ -59,3 +59,37 @@ select
   nullif(coalesce(raw_user_meta_data ->> 'avatar_url', raw_user_meta_data ->> 'picture'), '')
 from auth.users
 on conflict (user_id) do nothing;
+
+create table if not exists public.customer_addresses (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  label text not null check (char_length(label) between 1 and 40),
+  address_line text not null check (char_length(address_line) between 5 and 500),
+  locality text not null check (char_length(locality) between 2 and 160),
+  postal_code text check (postal_code is null or postal_code ~ '^[1-9][0-9]{5}$'),
+  latitude numeric(9,6) check (latitude is null or latitude between -90 and 90),
+  longitude numeric(9,6) check (longitude is null or longitude between -180 and 180),
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check ((latitude is null) = (longitude is null))
+);
+create index if not exists customer_addresses_user_created_idx
+  on public.customer_addresses(user_id, created_at desc);
+create unique index if not exists customer_addresses_one_default_idx
+  on public.customer_addresses(user_id) where is_default;
+
+alter table public.customer_addresses enable row level security;
+create policy "customers read own addresses" on public.customer_addresses for select to authenticated
+  using ((select auth.uid()) = user_id);
+create policy "customers create own addresses" on public.customer_addresses for insert to authenticated
+  with check ((select auth.uid()) = user_id);
+create policy "customers update own addresses" on public.customer_addresses for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+create policy "customers delete own addresses" on public.customer_addresses for delete to authenticated
+  using ((select auth.uid()) = user_id);
+
+revoke all on public.customer_addresses from anon, authenticated;
+grant select,insert,update,delete on public.customer_addresses to authenticated;
+grant usage,select on sequence public.customer_addresses_id_seq to authenticated;

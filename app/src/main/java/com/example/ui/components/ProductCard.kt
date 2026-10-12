@@ -129,21 +129,21 @@ fun ProductCard(
                     )
                 }
 
-                // Bottom-left Fast Delivery time badge
+                // Availability comes from the product model; do not invent a delivery ETA.
                 Row(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(6.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(GreenShopFastDeliveryBg)
+                        .background(if (product.inStock) GreenShopFastDeliveryBg else GreenShopDiscountBg)
                         .padding(horizontal = 5.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "⚡ ${product.deliveryMinutes} mins",
+                        text = if (product.inStock) "IN STOCK" else "OUT OF STOCK",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = GreenShopFastDelivery
+                        color = if (product.inStock) GreenShopFastDelivery else GreenShopDiscountRed
                     )
                 }
             }
@@ -214,7 +214,8 @@ fun ProductCard(
                                 .border(1.5.dp, GreenShopPrimary, RoundedCornerShape(8.dp))
                                 .background(GreenShopMintSurface)
                                 .clickable(enabled = product.inStock, onClick = onAdd)
-                                .padding(horizontal = 16.dp, vertical = 9.dp)
+                                .height(44.dp)
+                                .padding(horizontal = 16.dp)
                                 .testTag("product_add_button_${product.id}"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -236,7 +237,7 @@ fun ProductCard(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(22.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .clickable(onClick = onRemove)
                                     .testTag("product_remove_button_${product.id}"),
@@ -260,7 +261,7 @@ fun ProductCard(
 
                             Box(
                                 modifier = Modifier
-                                    .size(22.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .clickable(onClick = onAdd)
                                     .testTag("product_inc_button_${product.id}"),

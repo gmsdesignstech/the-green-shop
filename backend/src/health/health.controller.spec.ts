@@ -3,14 +3,14 @@ import { HealthController } from './health.controller';
 
 describe('HealthController', () => {
   it('reports a successful database probe', async () => {
-    const controller = new HealthController({ query: jest.fn().mockResolvedValue({ rows: [{ '?column?': 1 }] }) } as any);
+    const controller = new HealthController({ query: vi.fn().mockResolvedValue({ rows: [{ '?column?': 1 }] }) } as any);
     await expect(controller.database()).resolves.toEqual({ status: 'ok' });
   });
 
   it('returns a safe failure category and logs the server-side stack', async () => {
     const error = Object.assign(new Error('password authentication failed for user secret-user'), { code: '28P01' });
-    const logger = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    const controller = new HealthController({ query: jest.fn().mockRejectedValue(error) } as any);
+    const logger = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const controller = new HealthController({ query: vi.fn().mockRejectedValue(error) } as any);
     try {
       await controller.database();
       throw new Error('Expected database health to fail');

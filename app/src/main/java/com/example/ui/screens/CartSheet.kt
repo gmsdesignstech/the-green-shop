@@ -30,8 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -67,17 +66,21 @@ import com.example.viewmodel.GreenShopViewModel
 @Composable
 fun CartSheet(
     viewModel: GreenShopViewModel,
+    tokenProvider: suspend (Boolean) -> Result<String>,
+    isAuthenticated: Boolean,
+    onRequireAuthentication: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val cartItems by viewModel.cartItems.collectAsState()
     val cartCount by viewModel.cartCount.collectAsState()
     val cartTotal by viewModel.cartTotal.collectAsState()
-    val walletBalance by viewModel.walletBalance.collectAsState()
     val selectedAddress by viewModel.selectedAddress.collectAsState()
+    val checkoutLoading by viewModel.checkoutLoading.collectAsState()
+    val checkoutError by viewModel.checkoutError.collectAsState()
+    val addressSaving by viewModel.addressSaving.collectAsState()
+    val addressError by viewModel.addressError.collectAsState()
 
-    var selectedTip by remember { mutableStateOf(0.0) }
-    var useWallet by remember { mutableStateOf(true) }
     var showAddressPicker by remember { mutableStateOf(false) }
 
     if (showAddressPicker) {
@@ -85,15 +88,17 @@ fun CartSheet(
             initialLatitude = selectedAddress.latitude ?: 12.9716,
             initialLongitude = selectedAddress.longitude ?: 77.5946,
             onBack = { showAddressPicker = false },
+            isSaving = addressSaving,
+            saveError = addressError,
             onConfirm = { addressLine, locality, latitude, longitude ->
-                viewModel.addNewAddress(
-                    title = "Home",
-                    line = addressLine,
-                    locality = locality,
-                    latitude = latitude,
-                    longitude = longitude
+                viewModel.saveAddress(
+                    tokenProvider = tokenProvider,
+                    address = com.example.model.AddressItem(
+                        id = "", title = "Home", addressLine = addressLine, locality = locality,
+                        latitude = latitude, longitude = longitude
+                    ),
+                    onSuccess = { showAddressPicker = false }
                 )
-                showAddressPicker = false
             }
         )
         return
@@ -101,7 +106,7 @@ fun CartSheet(
 
     // Only the item subtotal is authoritative while server-side checkout is unavailable.
     // Delivery fees, discounts and the final payable amount must come from a checkout quote.
-    val displayedSubtotal = cartTotal + selectedTip
+    val displayedSubtotal = cartTotal
 
     Column(
         modifier = modifier
@@ -211,13 +216,13 @@ fun CartSheet(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Delivering to ${selectedAddress.title}",
+                                    text = if (selectedAddress.addressLine.isBlank()) "Select delivery address" else "Delivering to ${selectedAddress.title}",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = GreenShopDarkGreen
                                 )
                                 Text(
-                                    text = "${selectedAddress.addressLine}, ${selectedAddress.locality}",
+                                    text = if (selectedAddress.addressLine.isBlank()) "Choose a location before checkout" else "${selectedAddress.addressLine}, ${selectedAddress.locality}",
                                     fontSize = 11.sp,
                                     color = GreenShopDarkText
                                 )
@@ -233,94 +238,6 @@ fun CartSheet(
                         onAdd = { viewModel.addToCart(item.product) },
                         onRemove = { viewModel.removeFromCart(item.product.id) }
                     )
-                }
-
-                // Tip Rider Section
-                item {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Tip your delivery partner",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        text = "100% of the tip goes to your delivery rider",
-                        fontSize = 11.sp,
-                        color = GreenShopMutedText
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(0.0 to "None", 10.0 to "₹10", 20.0 to "₹20", 30.0 to "₹30").forEach { (amt, label) ->
-                            val isSelected = selectedTip == amt
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isSelected) GreenShopMintSurface else Color(0xFFF5F5F5))
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) GreenShopPrimary else GreenShopLightBorder,
-                                        RoundedCornerShape(8.dp)
-                                    )
-                                    .clickable { selectedTip = amt }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = if (isSelected) GreenShopPrimary else GreenShopDarkText
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Pay using Green Shop Money Balance Option
-                item {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        colors = CardDefaults.cardColors(containerColor = GreenShopYellowLight),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFE082))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { useWallet = !useWallet }
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = useWallet && walletBalance > 0,
-                                onCheckedChange = { useWallet = it },
-                                colors = CheckboxDefaults.colors(checkedColor = GreenShopPrimary)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Pay with THE GREEN SHOP Money",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = GreenShopDarkText
-                                )
-                                Text(
-                                    text = "Balance: ₹${walletBalance.toInt()} • Instant 1-tap checkout",
-                                    fontSize = 11.sp,
-                                    color = GreenShopMutedText
-                                )
-                            }
-                            Text(
-                                text = "⚡",
-                                fontSize = 18.sp
-                            )
-                        }
-                    }
                 }
 
                 // Bill Summary
@@ -342,9 +259,6 @@ fun CartSheet(
                                 fontSize = 14.sp
                             )
                             BillRow("Items Total", "₹${cartTotal.toInt()}")
-                            if (selectedTip > 0) {
-                                BillRow("Rider Tip", "₹${selectedTip.toInt()}")
-                            }
                             Text(
                                 text = "Delivery fees, discounts and taxes are calculated securely by the server at checkout.",
                                 fontSize = 11.sp,
@@ -370,14 +284,30 @@ fun CartSheet(
                         }
                     }
                 }
+                if (checkoutError != null) {
+                    item {
+                        Text(
+                            text = checkoutError.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+                if (addressError != null) {
+                    item { Text(addressError.orEmpty(), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
             // Place Order Button
             Button(
-                onClick = { },
-                enabled = false,
+                onClick = {
+                    if (isAuthenticated) viewModel.checkoutCod(tokenProvider, onDismiss)
+                    else onRequireAuthentication()
+                },
+                enabled = !checkoutLoading && cartItems.isNotEmpty() && (!isAuthenticated || selectedAddress.addressLine.isNotBlank()),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
@@ -405,8 +335,12 @@ fun CartSheet(
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (checkoutLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), color = GreenShopWhite, strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
                         Text(
-                            text = "Checkout needs server connection",
+                            text = if (checkoutLoading) "Placing order…" else if (isAuthenticated) "Place COD order" else "Sign in to checkout",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = GreenShopWhite

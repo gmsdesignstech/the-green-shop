@@ -50,6 +50,8 @@ export function databasePoolConfig(env: NodeJS.ProcessEnv = process.env): PoolCo
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    statement_timeout: 5_000,
+    query_timeout: 6_000,
     ssl: sslEnabled ? { rejectUnauthorized: true, ...(ca ? { ca } : {}) } : undefined,
   };
 }

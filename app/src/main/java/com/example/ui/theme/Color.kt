@@ -22,6 +22,10 @@ val GreenShopLightBorder = Color(0xFFE4E9E5)
 val GreenShopWhite = Color(0xFFFFFFFF)
 val GreenShopBackground = Color(0xFFF5FAF3)
 val GreenShopCardBg = Color(0xFFFFFFFF)
+val GreenShopWarmWhite = Color(0xFFFFFDF7)
+val GreenShopAmber = Color(0xFFF3A712)
+val GreenShopBlue = Color(0xFF2563EB)
+val GreenShopViolet = Color(0xFF7C3AED)
 
 // Status & Tag Colors
 val GreenShopDiscountRed = Color(0xFFD32F2F)     // Discount Tag

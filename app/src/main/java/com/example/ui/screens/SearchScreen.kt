@@ -25,10 +25,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -63,12 +64,10 @@ fun SearchScreen(
     val query by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
-
-    val popularSearches = listOf(
-        "Nandini Curd", "Coriander", "Red Onion", "Tomatoes",
-        "Bananas", "Spinach", "Shin Ramyun", "Farm Eggs",
-        "Paneer", "Milk", "Chai", "Bread"
-    )
+    val products by viewModel.catalogProducts.collectAsState()
+    val loading by viewModel.catalogLoading.collectAsState()
+    val error by viewModel.catalogError.collectAsState()
+    val popularSearches = products.asSequence().filter { it.inStock }.map { it.name }.distinct().take(8).toList()
 
     Column(
         modifier = modifier
@@ -119,13 +118,6 @@ fun SearchScreen(
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Mic",
-                            tint = GreenShopPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
                     }
                 },
                 shape = RoundedCornerShape(14.dp),
@@ -142,14 +134,14 @@ fun SearchScreen(
         }
 
         // Popular Searches chips when query is empty
-        if (query.isBlank()) {
+        if (query.isBlank() && popularSearches.isNotEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
                 Text(
-                    text = "Popular Searches",
+                    text = "Browse products",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -182,7 +174,23 @@ fun SearchScreen(
         }
 
         // Search Results Grid
-        if (searchResults.isEmpty()) {
+        if (error != null && products.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                    Button(onClick = viewModel::refreshCatalog) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Text("Retry")
+                    }
+                }
+            }
+        } else if (loading && products.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Loading the live catalog…") }
+        } else if (query.isBlank()) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text("Search the live catalog by product or category", color = GreenShopMutedText)
+            }
+        } else if (searchResults.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -198,7 +206,7 @@ fun SearchScreen(
                         fontSize = 15.sp
                     )
                     Text(
-                        text = "Try searching for tomatoes, curd, milk, or spinach",
+                        text = "Try another product or category name",
                         fontSize = 12.sp,
                         color = GreenShopMutedText
                     )

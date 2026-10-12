@@ -1,9 +1,9 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
-import { DevAuthService } from './dev-auth.service';
+import { DEVELOPMENT_USER_IDS, DevAuthService } from './dev-auth.service';
 
 describe('DevAuthService',()=>{
   const secret='development-test-secret-that-is-long-enough';
-  beforeEach(()=>{process.env.NODE_ENV='development';process.env.DEV_OTP_ENABLED='true';process.env.DEV_OTP_CODE='123456';process.env.DEV_AUTH_JWT_SECRET=secret;process.env.DEV_CUSTOMER_TEST_PHONE_NUMBER='+919000000001';process.env.DEV_ADMIN_TEST_PHONE_NUMBER='+919000000002';process.env.DEV_DELIVERY_PARTNER_TEST_PHONE_NUMBER='+919000000003';});
+  beforeEach(()=>{process.env.NODE_ENV='development';process.env.DEV_OTP_ENABLED='true';process.env.DEV_OTP_CODE='123456';delete process.env.DEV_OTP_VALID_UNTIL;process.env.DEV_AUTH_JWT_SECRET=secret;process.env.DEV_CUSTOMER_TEST_PHONE_NUMBER='+919000000001';process.env.DEV_ADMIN_TEST_PHONE_NUMBER='+919000000002';process.env.DEV_DELIVERY_PARTNER_TEST_PHONE_NUMBER='+919000000003';});
 
   it('issues a valid short-lived admin session in the client response format',async()=>{
     const service=new DevAuthService();
@@ -61,5 +61,38 @@ describe('DevAuthService',()=>{
   it('rejects the fixed OTP when development authentication is disabled',async()=>{
     process.env.DEV_OTP_ENABLED='false';
     await expect(new DevAuthService().login('+919123456789','123456','customer')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('locks one test identity after five incorrect OTP attempts',async()=>{
+    const service=new DevAuthService();
+    for(let attempt=0;attempt<5;attempt+=1){
+      await expect(service.login('+919000000001','000000','customer')).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+    await expect(service.login('+919000000001','123456','customer'))
+      .rejects.toThrow('Too many development OTP attempts');
+    // Lockout is scoped to the identity and does not block another allow-listed role.
+    await expect(service.login('+919000000002','123456','admin')).resolves.toBeDefined();
+  });
+
+  it('rejects an expired development OTP configuration',async()=>{
+    process.env.DEV_OTP_VALID_UNTIL='2020-01-01T00:00:00Z';
+    await expect(new DevAuthService().login('+919000000001','123456','customer'))
+      .rejects.toThrow('Development OTP has expired');
+  });
+
+  it('rejects an invalid development OTP expiry during startup',()=>{
+    process.env.DEV_OTP_VALID_UNTIL='not-a-date';
+    expect(()=>new DevAuthService()).toThrow('DEV_OTP_VALID_UNTIL must be a valid ISO-8601 timestamp');
+  });
+
+  it('revokes the previous session when login is repeated',async()=>{
+    const service=new DevAuthService();
+    const first=await service.login('+919000000001','123456','customer');
+    const second=await service.login('+919000000001','123456','customer');
+    await expect(service.verifyAccessToken(first.accessToken)).resolves.toBeNull();
+    await expect(service.verifyAccessToken(second.accessToken)).resolves.toEqual({
+      id: DEVELOPMENT_USER_IDS.customer,
+      role: 'customer',
+    });
   });
 });

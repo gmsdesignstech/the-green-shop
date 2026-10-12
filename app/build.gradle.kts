@@ -41,6 +41,10 @@ fun normalizedApiBaseUrl(rawValue: String, release: Boolean): String {
 
 val productionSupabaseUrl = localConfig("SUPABASE_URL")
 val productionSupabaseKey = localConfig("SUPABASE_PUBLISHABLE_KEY")
+val mapsApiKey = localConfig("MAPS_API_KEY").trim()
+val mapsConfigured = mapsApiKey.isNotBlank() &&
+  !mapsApiKey.contains("YOUR_", ignoreCase = true) &&
+  !mapsApiKey.contains("MISSING", ignoreCase = true)
 val developmentSupabaseUrl = localConfig("DEV_SUPABASE_URL")
 val developmentSupabaseKey = localConfig("DEV_SUPABASE_PUBLISHABLE_KEY")
 val developmentTestPhone = localConfig("DEV_CUSTOMER_TEST_PHONE_NUMBER").ifBlank { localConfig("DEV_TEST_PHONE_NUMBER") }
@@ -68,6 +72,9 @@ if (isReleaseInvocation) {
   }
   if (missing.isNotEmpty()) {
     throw GradleException("Release signing is not configured. Missing: ${missing.joinToString()}. Configure ignored key.properties or signing environment variables.")
+  }
+  if (!mapsConfigured) {
+    throw GradleException("MAPS_API_KEY must be a real Android-restricted Google Maps key for release builds")
   }
   val keystore = rootProject.file(releaseKeystorePath)
   if (!keystore.isFile) throw GradleException("Release keystore does not exist: ${keystore.absolutePath}")
@@ -101,7 +108,7 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    manifestPlaceholders["MAPS_API_KEY"] = localConfig("MAPS_API_KEY").ifBlank { "MISSING_MAPS_API_KEY" }
+    manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey.ifBlank { "MISSING_MAPS_API_KEY" }
   }
 
   signingConfigs {
@@ -132,6 +139,7 @@ android {
       buildConfigField("String", "DEV_ADMIN_TEST_PHONE_NUMBER", "\"\"")
       buildConfigField("String", "DEV_DELIVERY_PARTNER_TEST_PHONE_NUMBER", "\"\"")
       buildConfigField("boolean", "DEV_FIXED_OTP_ENABLED", "false")
+      buildConfigField("boolean", "MAPS_CONFIGURED", mapsConfigured.toString())
       buildConfigField("String", "API_BASE_URL", quotedBuildConfig(normalizedApiBaseUrl(releaseApiBaseUrl, release = isReleaseInvocation)))
     }
     debug {
@@ -143,6 +151,7 @@ android {
       buildConfigField("String", "DEV_ADMIN_TEST_PHONE_NUMBER", quotedBuildConfig(if (localFixedOtpEnabled) developmentAdminPhone else ""))
       buildConfigField("String", "DEV_DELIVERY_PARTNER_TEST_PHONE_NUMBER", quotedBuildConfig(if (localFixedOtpEnabled) developmentPartnerPhone else ""))
       buildConfigField("boolean", "DEV_FIXED_OTP_ENABLED", localFixedOtpEnabled.toString())
+      buildConfigField("boolean", "MAPS_CONFIGURED", mapsConfigured.toString())
       buildConfigField("String", "API_BASE_URL", quotedBuildConfig(normalizedApiBaseUrl(localConfig("API_BASE_URL"), release = false)))
     }
   }

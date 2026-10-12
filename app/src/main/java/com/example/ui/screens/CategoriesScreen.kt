@@ -70,7 +70,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.SampleData
 import com.example.model.CategorySortOption
 import com.example.model.GroceryCategory
 import com.example.model.GrocerySubcategory
@@ -100,7 +99,6 @@ fun CategoriesScreen(
     modifier: Modifier = Modifier
 ) {
     val selectedAddress by viewModel.selectedAddress.collectAsState()
-    val walletBalance by viewModel.walletBalance.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
 
     val activeCategory by viewModel.activeGroceryCategory.collectAsState()
@@ -108,6 +106,9 @@ fun CategoriesScreen(
     val categoryProducts by viewModel.categoryProducts.collectAsState()
     val activeSortOption by viewModel.activeSortOption.collectAsState()
     val isOrganicOnly by viewModel.isOrganicOnlyFilter.collectAsState()
+    val categories by viewModel.catalogCategories.collectAsState()
+    val catalogLoading by viewModel.catalogLoading.collectAsState()
+    val catalogError by viewModel.catalogError.collectAsState()
 
     var layoutMode by remember { mutableStateOf(CategoryLayoutMode.SPLIT_NAVIGATOR) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -122,9 +123,7 @@ fun CategoriesScreen(
         // Top Delivery and Search Bar
         TopDeliveryBar(
             currentAddress = selectedAddress,
-            walletBalance = walletBalance,
             onAddressClick = { viewModel.navigateTo(AppScreen.PROFILE) },
-            onWalletClick = { viewModel.navigateTo(AppScreen.WALLET) },
             onProfileClick = { viewModel.navigateTo(AppScreen.PROFILE) },
             searchQuery = searchQuery,
             onQueryChange = {
@@ -241,7 +240,7 @@ fun CategoriesScreen(
                         .border(1.dp, GreenShopLightBorder),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(SampleData.groceryCategories) { category ->
+                    items(categories) { category ->
                         val isSelected = activeCategory.id == category.id
                         CategorySidebarRailItem(
                             category = category,
@@ -554,7 +553,7 @@ fun CategoriesScreen(
                     )
                 }
 
-                items(SampleData.groceryCategories) { category ->
+                items(categories) { category ->
                     GroceryDepartmentCard(
                         category = category,
                         onCategoryClick = {

@@ -20,10 +20,14 @@ import { PaymentsController } from './payments/payments.controller';
 import { PaymentsService } from './payments/payments.service';
 import { RazorpayProvider } from './payments/razorpay.provider';
 import { HealthController } from './health/health.controller';
+import { CatalogController } from './catalog/catalog.controller';
+import { CatalogService } from './catalog/catalog.service';
+import { CustomerController } from './customer/customer.controller';
+import { CustomerService } from './customer/customer.service';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true }), ThrottlerModule.forRoot([{ ttl: 60000, limit: 30 }])],
-  controllers: [ApplicationsController, AdminController, RiderController, TrackingController, DevAuthController, PaymentsController, HealthController],
+  controllers: [ApplicationsController, AdminController, RiderController, TrackingController, DevAuthController, PaymentsController, HealthController, CatalogController, CustomerController],
   providers: [
     DatabaseService,
     ApplicationsService,
@@ -36,6 +40,8 @@ import { HealthController } from './health/health.controller';
     DevAuthService,
     PaymentsService,
     RazorpayProvider,
+    CatalogService,
+    CustomerService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

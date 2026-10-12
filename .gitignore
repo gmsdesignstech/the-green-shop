@@ -19,6 +19,8 @@ local.properties
 .env
 debug.keystore
 my-upload-key.jks
+*.jks
+*.pem
 keystore.properties
 key.properties
 *.apk
@@ -29,3 +31,4 @@ replay_pid*.log
 gradle-*-bin.zip
 /backend/dist/
 /backend/node_modules/
+/supabase/.temp/

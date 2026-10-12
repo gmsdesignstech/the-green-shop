@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.GreenShopDarkGreen
@@ -89,14 +90,15 @@ fun BottomNavBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(8.dp)
+            .shadow(12.dp, RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+            .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .65f))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .5f), RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -108,13 +110,13 @@ fun BottomNavBar(
                         .clickable {
                             item.screen?.let(onNavigate)
                         }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
                         .testTag("nav_${item.label.lowercase().replace(" ", "_")}"),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(width = 48.dp, height = 32.dp)
+                            .size(width = 50.dp, height = 34.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(if (isSelected) GreenShopMintSurface else Color.Transparent),
                         contentAlignment = Alignment.Center
@@ -129,9 +131,11 @@ fun BottomNavBar(
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.label,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) GreenShopDarkGreen else GreenShopMutedText
+                        color = if (isSelected) GreenShopDarkGreen else GreenShopMutedText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Clip
                     )
                 }
             }

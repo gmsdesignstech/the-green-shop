@@ -2,21 +2,21 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { decodeJwt, jwtVerify } from 'jose';
 import { AuthGuard } from './auth.guard';
 
-jest.mock('jose', () => ({
-  createRemoteJWKSet: jest.fn(() => jest.fn()),
-  jwtVerify: jest.fn(),
-  decodeJwt: jest.fn(),
+vi.mock('jose', () => ({
+  createRemoteJWKSet: vi.fn(() => vi.fn()),
+  jwtVerify: vi.fn(),
+  decodeJwt: vi.fn(),
 }));
 
 describe('AuthGuard', () => {
-  const devAuth = { verifyAccessToken: jest.fn().mockResolvedValue(null) } as any;
+  const devAuth = { verifyAccessToken: vi.fn().mockResolvedValue(null) } as any;
   const request = { headers: { authorization: 'Bearer test-token' } } as any;
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
   } as unknown as ExecutionContext;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     process.env.SUPABASE_URL = 'https://project.supabase.co';
     process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-key';
     request.user = undefined;
@@ -24,18 +24,18 @@ describe('AuthGuard', () => {
   });
 
   it('accepts a locally verified asymmetric token', async () => {
-    (jwtVerify as jest.Mock).mockResolvedValue({ payload: { sub: 'admin-1' } });
+    (jwtVerify as ReturnType<typeof vi.fn>).mockResolvedValue({ payload: { sub: 'admin-1' } });
 
     await expect(new AuthGuard(devAuth).canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual({ id: 'admin-1' });
   });
 
   it('validates shared-secret tokens with Supabase Auth', async () => {
-    (jwtVerify as jest.Mock).mockRejectedValue(new Error('No matching JWKS key'));
-    (decodeJwt as jest.Mock).mockReturnValue({
+    (jwtVerify as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('No matching JWKS key'));
+    (decodeJwt as ReturnType<typeof vi.fn>).mockReturnValue({
       iss: 'https://project.supabase.co/auth/v1', aud: 'authenticated', sub: 'partner-1',
     });
-    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'partner-1' }) }) as any;
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 'partner-1' }) }) as any;
 
     await expect(new AuthGuard(devAuth).canActivate(context)).resolves.toBe(true);
     expect(request.user).toEqual({ id: 'partner-1' });
@@ -46,8 +46,8 @@ describe('AuthGuard', () => {
   });
 
   it('rejects tokens rejected by both verification paths', async () => {
-    (jwtVerify as jest.Mock).mockRejectedValue(new Error('Invalid token'));
-    global.fetch = jest.fn().mockResolvedValue({ ok: false }) as any;
+    (jwtVerify as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Invalid token'));
+    global.fetch = vi.fn().mockResolvedValue({ ok: false }) as any;
 
     await expect(new AuthGuard(devAuth).canActivate(context)).rejects.toBeInstanceOf(UnauthorizedException);
     expect(request.user).toBeUndefined();

@@ -45,9 +45,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.SampleData
 import com.example.ui.components.GreenShopBrandBanner
 import com.example.ui.components.ProductPhotoCarousel
 import com.example.ui.components.ProductCard
@@ -72,22 +72,36 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val selectedAddress by viewModel.selectedAddress.collectAsState()
-    val walletBalance by viewModel.walletBalance.collectAsState()
     val cartItems by viewModel.cartItems.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val orders by viewModel.orders.collectAsState()
+    val products by viewModel.catalogProducts.collectAsState()
+    val categories by viewModel.catalogCategories.collectAsState()
+    val catalogLoading by viewModel.catalogLoading.collectAsState()
+    val catalogError by viewModel.catalogError.collectAsState()
 
-    val categoryTabs = listOf("All", "🥦 Veggies", "🍎 Fruits", "🌿 Leafy Greens", "🌱 Organic", "🧅 Daily Roots", "🧺 Combos")
+    val categoryTabs = listOf("All") + categories.map { it.name }
+    val freshPicks = products.take(10)
+    val leafyProducts = products.filter {
+        it.name.contains("leaf", true) || it.name.contains("spinach", true) ||
+            it.subcategory.contains("leaf", true) || it.subcategory.contains("herb", true)
+    }
+    val fruitCategoryId = categories.firstOrNull { it.name.contains("fruit", true) }?.id
+    val fruitProducts = if (fruitCategoryId == null) emptyList() else products.filter { it.category == fruitCategoryId }
+    val vegetableProducts = products.filter {
+        it.subcategory.contains("root", true) || it.subcategory.contains("tomato", true) ||
+            it.subcategory.contains("cucumber", true)
+    }
     var selectedTabIndex by remember { mutableStateOf(0) }
 
     var homeSearchQuery by remember { mutableStateOf("") }
     var homeSearchCategoryScope by remember { mutableStateOf("ALL") }
 
-    val matchingProducts = remember(homeSearchQuery, homeSearchCategoryScope) {
+    val matchingProducts = remember(homeSearchQuery, homeSearchCategoryScope, products) {
         if (homeSearchQuery.isBlank()) emptyList()
         else {
             val q = homeSearchQuery.trim().lowercase()
-            SampleData.products.filter { prod ->
+            products.filter { prod ->
                 val matchesText = prod.name.lowercase().contains(q) ||
                         prod.subcategory.lowercase().contains(q) ||
                         prod.description.lowercase().contains(q)
@@ -107,9 +121,7 @@ fun HomeScreen(
         item {
             TopDeliveryBar(
                 currentAddress = selectedAddress,
-                walletBalance = walletBalance,
                 onAddressClick = { viewModel.navigateTo(AppScreen.PROFILE) },
-                onWalletClick = { viewModel.navigateTo(AppScreen.WALLET) },
                 onProfileClick = { viewModel.navigateTo(AppScreen.PROFILE) },
                 searchQuery = homeSearchQuery,
                 onQueryChange = { homeSearchQuery = it },
@@ -239,8 +251,39 @@ fun HomeScreen(
             // NORMAL FRUITS & VEGETABLES HOME EXPERIENCE
             // ========================================================
 
-            // Category Filter Tabs
-            item {
+            if (catalogError != null) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth().padding(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Live catalog unavailable", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(catalogError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Button(onClick = viewModel::refreshCatalog, modifier = Modifier.padding(top = 8.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(Modifier.width(6.dp)); Text("Retry")
+                            }
+                        }
+                    }
+                }
+            } else if (catalogLoading) {
+                item { Text("Loading today’s fresh catalog…", modifier = Modifier.padding(20.dp), color = GreenShopMutedText) }
+            } else if (products.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("No products are available right now", fontWeight = FontWeight.Bold)
+                        Text("Pull back later or tap Refresh to check the live catalog again.", color = GreenShopMutedText)
+                        Button(onClick = viewModel::refreshCatalog, modifier = Modifier.padding(top = 8.dp)) {
+                            Icon(Icons.Default.Refresh, contentDescription = null)
+                            Spacer(Modifier.width(6.dp)); Text("Refresh")
+                        }
+                    }
+                }
+            }
+
+            // Category shortcuts come from the live backend and open the functional category view.
+            if (categories.isNotEmpty()) item {
                 ScrollableTabRow(
                     selectedTabIndex = selectedTabIndex,
                     edgePadding = 16.dp,
@@ -253,7 +296,13 @@ fun HomeScreen(
                         val isSelected = selectedTabIndex == index
                         Tab(
                             selected = isSelected,
-                            onClick = { selectedTabIndex = index },
+                            onClick = {
+                                selectedTabIndex = index
+                                categories.getOrNull(index - 1)?.let {
+                                    viewModel.selectGroceryCategory(it)
+                                    viewModel.navigateTo(AppScreen.CATEGORIES)
+                                }
+                            },
                             modifier = Modifier
                                 .padding(horizontal = 4.dp, vertical = 6.dp)
                                 .clip(RoundedCornerShape(20.dp))
@@ -279,9 +328,10 @@ fun HomeScreen(
                 }
             }
 
+            if (products.isNotEmpty()) {
             item {
                 ProductPhotoCarousel(
-                    products = SampleData.products.filter { com.example.ui.components.productPhotoResource(it.id) != null }.take(8),
+                    products = products.take(8),
                     onProductClick = viewModel::showProductDetail,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
@@ -352,7 +402,7 @@ fun HomeScreen(
                                     .clip(RoundedCornerShape(20.dp))
                                     .background(GreenShopYellow)
                                     .clickable {
-                                        viewModel.selectGroceryCategory(SampleData.groceryCategories.first())
+                                        categories.firstOrNull()?.let(viewModel::selectGroceryCategory)
                                         viewModel.navigateTo(AppScreen.CATEGORIES)
                                     }
                                     .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -517,8 +567,8 @@ fun HomeScreen(
                 }
             }
 
-            // Section 1: "Bestseller Produce"
             item {
+                if (freshPicks.isNotEmpty()) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
                     Row(
                         modifier = Modifier
@@ -528,10 +578,11 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Bestseller Farm Picks",
+                            text = "Fresh Picks",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
                         Text(
                             text = "See all",
@@ -540,19 +591,16 @@ fun HomeScreen(
                             color = GreenShopPrimary,
                             modifier = Modifier
                                 .clickable { viewModel.navigateTo(AppScreen.CATEGORIES) }
-                                .padding(4.dp)
+                                .padding(8.dp),
+                            maxLines = 1
                         )
-                    }
-
-                    val bestsellers = SampleData.products.filter {
-                        it.badge == "Bestseller" || it.id in listOf("p_tomato", "p_onion", "p_coriander", "p_banana", "p_apple")
                     }
 
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(bestsellers) { product ->
+                        items(freshPicks, key = { it.id }) { product ->
                             val qty = viewModel.getProductQuantity(product.id)
                             val isFav = favoriteIds.contains(product.id)
                             ProductCard(
@@ -567,10 +615,12 @@ fun HomeScreen(
                         }
                     }
                 }
+                }
             }
 
             // Section 2: "Fresh Leafy Greens & Herbs"
             item {
+                if (leafyProducts.isNotEmpty()) {
                 Column(modifier = Modifier.padding(vertical = 12.dp)) {
                     Row(
                         modifier = Modifier
@@ -579,7 +629,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(
                                 text = "Leafy Greens & Herbs",
                                 fontSize = 20.sp,
@@ -587,7 +637,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Aromatic, clean washed spinach, mint, and coriander",
+                                text = "Available leafy greens and herbs",
                                 fontSize = 12.sp,
                                 color = GreenShopMutedText
                             )
@@ -599,21 +649,20 @@ fun HomeScreen(
                             color = GreenShopPrimary,
                             modifier = Modifier
                                 .clickable {
-                                    val vegCat = SampleData.groceryCategories.firstOrNull { it.id == "cat_veg" }
+                                    val vegCat = categories.firstOrNull { it.name.contains("veget", true) }
                                     if (vegCat != null) viewModel.selectGroceryCategory(vegCat)
                                     viewModel.navigateTo(AppScreen.CATEGORIES)
                                 }
-                                .padding(4.dp)
+                                .padding(8.dp),
+                            maxLines = 1
                         )
                     }
-
-                    val leafyList = SampleData.products.filter { it.subcategory == "Leafy Greens & Herbs" }
 
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(leafyList) { product ->
+                        items(leafyProducts, key = { it.id }) { product ->
                             val qty = viewModel.getProductQuantity(product.id)
                             val isFav = favoriteIds.contains(product.id)
                             ProductCard(
@@ -628,10 +677,12 @@ fun HomeScreen(
                         }
                     }
                 }
+                }
             }
 
             // Section 3: "Sweet Orchard Fruits"
             item {
+                if (fruitProducts.isNotEmpty()) {
                 Column(modifier = Modifier.padding(vertical = 12.dp)) {
                     Row(
                         modifier = Modifier
@@ -640,7 +691,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(
                                 text = "Sweet Orchard Fruits",
                                 fontSize = 20.sp,
@@ -648,7 +699,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Naturally ripened • Bananas, Apples, Melons & Oranges",
+                                text = "Available products from the fruit catalog",
                                 fontSize = 12.sp,
                                 color = GreenShopMutedText
                             )
@@ -660,21 +711,20 @@ fun HomeScreen(
                             color = GreenShopPrimary,
                             modifier = Modifier
                                 .clickable {
-                                    val fruitCat = SampleData.groceryCategories.firstOrNull { it.id == "cat_fruits" }
+                                    val fruitCat = categories.firstOrNull { it.name.contains("fruit", true) }
                                     if (fruitCat != null) viewModel.selectGroceryCategory(fruitCat)
                                     viewModel.navigateTo(AppScreen.CATEGORIES)
                                 }
-                                .padding(4.dp)
+                                .padding(8.dp),
+                            maxLines = 1
                         )
                     }
-
-                    val fruitsList = SampleData.products.filter { it.category == "cat_fruits" }
 
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(fruitsList) { product ->
+                        items(fruitProducts, key = { it.id }) { product ->
                             val qty = viewModel.getProductQuantity(product.id)
                             val isFav = favoriteIds.contains(product.id)
                             ProductCard(
@@ -689,10 +739,12 @@ fun HomeScreen(
                         }
                     }
                 }
+                }
             }
 
             // Section 4: "Daily Cooking Vegetables & Roots"
             item {
+                if (vegetableProducts.isNotEmpty()) {
                 Column(modifier = Modifier.padding(vertical = 12.dp)) {
                     Row(
                         modifier = Modifier
@@ -701,7 +753,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(
                                 text = "Daily Kitchen Vegetables",
                                 fontSize = 20.sp,
@@ -709,7 +761,7 @@ fun HomeScreen(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Onions, Tomatoes, Carrots, Potatoes & Garlic",
+                                text = "Available vegetables for everyday cooking",
                                 fontSize = 12.sp,
                                 color = GreenShopMutedText
                             )
@@ -721,23 +773,20 @@ fun HomeScreen(
                             color = GreenShopPrimary,
                             modifier = Modifier
                                 .clickable {
-                                    val vegCat = SampleData.groceryCategories.firstOrNull { it.id == "cat_veg" }
+                                    val vegCat = categories.firstOrNull { it.name.contains("veget", true) }
                                     if (vegCat != null) viewModel.selectGroceryCategory(vegCat)
                                     viewModel.navigateTo(AppScreen.CATEGORIES)
                                 }
-                                .padding(4.dp)
+                                .padding(8.dp),
+                            maxLines = 1
                         )
-                    }
-
-                    val rootsList = SampleData.products.filter {
-                        it.subcategory == "Roots & Daily Essentials" || it.subcategory == "Tomatoes & Cucumbers"
                     }
 
                     LazyRow(
                         contentPadding = PaddingValues(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(rootsList) { product ->
+                        items(vegetableProducts, key = { it.id }) { product ->
                             val qty = viewModel.getProductQuantity(product.id)
                             val isFav = favoriteIds.contains(product.id)
                             ProductCard(
@@ -751,6 +800,7 @@ fun HomeScreen(
                             )
                         }
                     }
+                }
                 }
             }
 
@@ -767,28 +817,15 @@ fun HomeScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         GreenShopBrandBanner(showTagline = true)
                         Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "⚡", fontSize = 24.sp)
-                                Text(text = "10 Mins", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text(text = "Farm To Door", fontSize = 10.sp, color = GreenShopMutedText)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "🌿", fontSize = 24.sp)
-                                Text(text = "100% Fresh", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text(text = "Hand-Graded", fontSize = 10.sp, color = GreenShopMutedText)
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(text = "🛡️", fontSize = 24.sp)
-                                Text(text = "No Questions", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                Text(text = "Instant Replacement", fontSize = 10.sp, color = GreenShopMutedText)
-                            }
-                        }
+                        Text(
+                            text = "Live prices, stock availability, and product details come directly from the store catalog.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GreenShopMutedText,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
+            }
             }
         }
     }

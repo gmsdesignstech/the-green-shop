@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -42,9 +41,7 @@ import com.example.ui.theme.GreenShopYellowBright
 @Composable
 fun TopDeliveryBar(
     currentAddress: AddressItem,
-    walletBalance: Double,
     onAddressClick: () -> Unit,
-    onWalletClick: () -> Unit,
     onProfileClick: () -> Unit,
     searchQuery: String = "",
     onQueryChange: (String) -> Unit = {},
@@ -109,37 +106,11 @@ fun TopDeliveryBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Right Action Icons: Wallet pill + Profile Avatar
+            // Profile access. Financial balances are not shown until a server-backed wallet exists.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Wallet balance pill
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(GreenShopWhite)
-                        .border(1.dp, GreenShopWhite.copy(alpha = .18f), RoundedCornerShape(20.dp))
-                        .clickable(onClick = onWalletClick)
-                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                        .testTag("top_bar_wallet_pill"),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AccountBalanceWallet,
-                        contentDescription = "Wallet",
-                        tint = GreenShopPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "₹${walletBalance.toInt()}",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = GreenShopDarkText
-                    )
-                }
-
                 // Profile Avatar Button
                 Box(
                     modifier = Modifier

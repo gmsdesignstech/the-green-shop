@@ -1,4 +1,4 @@
-import { IsIn, IsString, Matches } from 'class-validator';
+import { IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class DevLoginDto {
   @Matches(/^\+91[6-9]\d{9}$/) phone!: string;
@@ -7,9 +7,9 @@ export class DevLoginDto {
 }
 
 export class DevRefreshDto {
-  @IsString() refreshToken!: string;
+  @IsString() @MinLength(32) @MaxLength(256) refreshToken!: string;
 }
 
 export class DevLogoutDto {
-  @IsString() refreshToken!: string;
+  @IsString() @MinLength(32) @MaxLength(256) refreshToken!: string;
 }

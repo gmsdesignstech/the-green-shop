@@ -4,7 +4,7 @@ import { AdminService } from './admin.service';
 describe('AdminService business rules', () => {
   it('uses schema-supported order payment states and computes the low-stock total', async () => {
     const db = {
-      query: jest.fn()
+      query: vi.fn()
         .mockResolvedValueOnce({ rows: [{ today_orders: 2, pending_orders: 1, completed_orders: 1, gross_sales: '125.00', payment_failures: 0, active_deliveries: 0 }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
@@ -27,8 +27,8 @@ describe('AdminService business rules', () => {
 
   it('returns dashboard sections independently and logs full query failures', async () => {
     const error = new Error('self-signed certificate in certificate chain');
-    const logError = jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    const db = { query: jest.fn().mockRejectedValue(error) } as any;
+    const logError = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const db = { query: vi.fn().mockRejectedValue(error) } as any;
     const service = new AdminService(db);
 
     try {
@@ -59,7 +59,7 @@ describe('AdminService business rules', () => {
   });
 
   it('rejects a compare-at price below the selling price before writing', async () => {
-    const db = { transaction: jest.fn() } as any;
+    const db = { transaction: vi.fn() } as any;
     const service = new AdminService(db);
     await expect(service.createProduct('admin', {
       name: 'Spinach', description: '', unit: '250 g', price: 50, compareAtPrice: 40, isVisible: true,
@@ -68,7 +68,7 @@ describe('AdminService business rules', () => {
   });
 
   it('prevents inventory adjustments that cannot be applied atomically', async () => {
-    const client = { query: jest.fn().mockResolvedValue({ rowCount: 0, rows: [] }) };
+    const client = { query: vi.fn().mockResolvedValue({ rowCount: 0, rows: [] }) };
     const db = { transaction: (work: any) => work(client) } as any;
     const service = new AdminService(db);
     await expect(service.adjustInventory('admin', 1, { delta: -99, reason: 'Damaged stock' }))
@@ -77,7 +77,7 @@ describe('AdminService business rules', () => {
   });
 
   it('rejects invalid order lifecycle transitions', async () => {
-    const client = { query: jest.fn().mockResolvedValueOnce({ rowCount: 1, rows: [{ status: 'delivered', version: 3 }] }) };
+    const client = { query: vi.fn().mockResolvedValueOnce({ rowCount: 1, rows: [{ status: 'delivered', version: 3 }] }) };
     const db = { transaction: (work: any) => work(client) } as any;
     const service = new AdminService(db);
     await expect(service.changeOrderStatus('admin', 7, { status: 'cancelled', reason: 'late', version: 3 }))
@@ -85,7 +85,7 @@ describe('AdminService business rules', () => {
   });
 
   it('rejects invalid promotion date ranges before writing', async () => {
-    const db = { transaction: jest.fn() } as any;
+    const db = { transaction: vi.fn() } as any;
     const service = new AdminService(db);
     await expect(service.createPromotion('admin', {
       title: 'Daily greens', description: '', kind: 'daily', discountType: 'percentage',
@@ -97,7 +97,7 @@ describe('AdminService business rules', () => {
   });
 
   it('rejects percentage promotions over 100 percent', async () => {
-    const db = { transaction: jest.fn() } as any;
+    const db = { transaction: vi.fn() } as any;
     const service = new AdminService(db);
     await expect(service.createPromotion('admin', {
       title: 'Invalid offer', description: '', kind: 'festival', discountType: 'percentage',
@@ -108,7 +108,7 @@ describe('AdminService business rules', () => {
   });
 
   it('lists customers without exposing authentication secrets or staff accounts', async () => {
-    const db = { query: jest.fn().mockResolvedValue({ rows: [], rowCount: 0 }) } as any;
+    const db = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 0 }) } as any;
     await new AdminService(db).customers({ limit: 25, search: '9876' });
     const [sql, values] = db.query.mock.calls[0];
     expect(sql).toContain('join auth.users');
@@ -118,7 +118,7 @@ describe('AdminService business rules', () => {
   });
 
   it('changes customer status transactionally and writes an audit record', async () => {
-    const client = { query: jest.fn()
+    const client = { query: vi.fn()
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'customer-1', account_status: 'suspended' }] })
       .mockResolvedValueOnce({ rowCount: 1, rows: [] }) };
     const db = { transaction: (work: any) => work(client) } as any;

@@ -57,6 +57,8 @@ fun OrderAgainScreen(
     modifier: Modifier = Modifier
 ) {
     val orders by viewModel.orders.collectAsState()
+    val loading by viewModel.ordersLoading.collectAsState()
+    val error by viewModel.ordersError.collectAsState()
 
     LazyColumn(
         modifier = modifier
@@ -80,7 +82,16 @@ fun OrderAgainScreen(
             }
         }
 
-        if (orders.isEmpty()) {
+        if (loading) {
+            item { Text("Loading your orders…", color = GreenShopMutedText, modifier = Modifier.padding(vertical = 24.dp)) }
+        } else if (error != null) {
+            item {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)) {
+                    Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                    Text("Return to Home and reopen Orders to retry.", color = GreenShopMutedText, fontSize = 12.sp)
+                }
+            }
+        } else if (orders.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier

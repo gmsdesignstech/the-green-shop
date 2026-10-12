@@ -54,7 +54,6 @@ import com.example.ui.screens.RoleSelectionScreen
 import com.example.ui.screens.StaffAuthScreen
 import com.example.ui.screens.UserRole
 import com.example.ui.screens.SearchScreen
-import com.example.ui.screens.WalletScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.viewmodel.AppScreen
 import com.example.viewmodel.AuthViewModel
@@ -62,6 +61,7 @@ import com.example.viewmodel.GreenShopViewModel
 import com.example.data.auth.SupabaseAuthRepository
 import com.example.data.applications.ApplicationRepository
 import com.example.data.applications.ApplicationApiException
+import com.example.data.customer.CartStore
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -69,7 +69,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val greenShopViewModel: GreenShopViewModel = viewModel()
+            val greenShopViewModel: GreenShopViewModel = viewModel {
+                GreenShopViewModel(cartStore = CartStore(applicationContext))
+            }
             val authViewModel: AuthViewModel = viewModel {
                 AuthViewModel(SupabaseAuthRepository(applicationContext))
             }
@@ -80,6 +82,7 @@ class MainActivity : ComponentActivity() {
             var selectedRole by rememberSaveable {
                 mutableStateOf<UserRole?>(if (authState.isAuthenticated) null else UserRole.CUSTOMER)
             }
+            var browsingAsGuest by rememberSaveable { mutableStateOf(false) }
             val applicationRepository = remember { ApplicationRepository() }
             val authScope = rememberCoroutineScope()
             var adminApproved by remember { mutableStateOf(false) }
@@ -94,6 +97,7 @@ class MainActivity : ComponentActivity() {
                         access?.deliveryPartner == true -> UserRole.DELIVERY_PARTNER
                         else -> UserRole.CUSTOMER
                     }
+                    if (authState.isAuthenticated) browsingAsGuest = false
                 }
             }
 
@@ -129,7 +133,7 @@ class MainActivity : ComponentActivity() {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else when (val role = selectedRole) {
                     null -> RoleSelectionScreen(onSelectRole = { selectedRole = it })
-                    UserRole.CUSTOMER -> if (!authState.isAuthenticated) {
+                    UserRole.CUSTOMER -> if (!authState.isAuthenticated && !browsingAsGuest) {
                         LandingScreen(
                             otpSent = authState.otpSent,
                             isLoading = authState.isLoading,
@@ -145,11 +149,19 @@ class MainActivity : ComponentActivity() {
                                 authViewModel.changePhoneNumber()
                                 selectedRole = null
                             },
+                            onBrowseAsGuest = { browsingAsGuest = true },
                             selectedRole = UserRole.CUSTOMER,
                             onSelectRole = { authViewModel.changePhoneNumber(); selectedRole = it }
                         )
                     } else {
-                        GreenShopApp(viewModel = greenShopViewModel, authenticatedUser = authState.currentUser, onRefreshIdentity = authViewModel::refreshIdentity, onSignOut = {
+                        GreenShopApp(viewModel = greenShopViewModel, authenticatedUser = authState.currentUser,
+                            tokenProvider = authViewModel::validAccessToken,
+                            isAuthenticated = authState.isAuthenticated,
+                            onRequireAuthentication = {
+                                browsingAsGuest = false
+                                authViewModel.clearError()
+                            },
+                            onRefreshIdentity = authViewModel::refreshIdentity, onSignOut = {
                             greenShopViewModel.clearCustomerSessionState()
                             authViewModel.signOut()
                             selectedRole = UserRole.CUSTOMER
@@ -211,6 +223,9 @@ class MainActivity : ComponentActivity() {
 fun GreenShopApp(
     viewModel: GreenShopViewModel,
     authenticatedUser: com.example.data.auth.AuthenticatedUser?,
+    tokenProvider: suspend (Boolean) -> Result<String>,
+    isAuthenticated: Boolean,
+    onRequireAuthentication: () -> Unit,
     onRefreshIdentity: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -220,6 +235,13 @@ fun GreenShopApp(
     val cartTotal by viewModel.cartTotal.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
     val selectedProductDetail by viewModel.selectedProductDetail.collectAsState()
+
+    LaunchedEffect(authenticatedUser?.id) {
+        if (authenticatedUser != null) {
+            viewModel.refreshOrders(tokenProvider)
+            viewModel.refreshAddresses(tokenProvider)
+        }
+    }
 
     var showCartSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -240,7 +262,11 @@ fun GreenShopApp(
                 cartItems = cartItems,
                 cartTotal = cartTotal,
                 onViewCartClick = { showCartSheet = true },
-                onNavigate = { screen -> viewModel.navigateTo(screen) }
+                onNavigate = { screen ->
+                    if (!isAuthenticated && screen in setOf(AppScreen.ORDER_AGAIN, AppScreen.PROFILE)) {
+                        onRequireAuthentication()
+                    } else viewModel.navigateTo(screen)
+                }
             )
         }
     ) { innerPadding ->
@@ -264,10 +290,6 @@ fun GreenShopApp(
                 )
                 AppScreen.RECIPES -> RecipesScreen(
                     viewModel = viewModel
-                )
-                AppScreen.WALLET -> WalletScreen(
-                    viewModel = viewModel,
-                    onBack = { viewModel.navigateBack() }
                 )
                 AppScreen.PROFILE -> ProfileScreen(
                     viewModel = viewModel,
@@ -295,6 +317,12 @@ fun GreenShopApp(
         ) {
             CartSheet(
                 viewModel = viewModel,
+                tokenProvider = tokenProvider,
+                isAuthenticated = isAuthenticated,
+                onRequireAuthentication = {
+                    showCartSheet = false
+                    onRequireAuthentication()
+                },
                 onDismiss = { showCartSheet = false }
             )
         }

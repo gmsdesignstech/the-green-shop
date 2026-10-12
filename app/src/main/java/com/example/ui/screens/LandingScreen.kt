@@ -47,6 +47,7 @@ fun LandingScreen(
     onChangePhoneNumber: () -> Unit,
     onClearError: () -> Unit,
     onBack: () -> Unit,
+    onBrowseAsGuest: () -> Unit = {},
     selectedRole: UserRole = UserRole.CUSTOMER,
     onSelectRole: (UserRole) -> Unit = {},
     roleTitle: String = "Customer",
@@ -195,6 +196,15 @@ fun LandingScreen(
             ) {
                 if (isLoading) CircularProgressIndicator(Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 else Text(if (otpSent) "Verify & continue" else "Continue", fontWeight = FontWeight.Bold)
+            }
+            if (!otpSent && selectedRole == UserRole.CUSTOMER) {
+                TextButton(
+                    onClick = onBrowseAsGuest,
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth().testTag("browse_as_guest_button")
+                ) {
+                    Text("Browse fresh products without signing in", fontWeight = FontWeight.SemiBold)
+                }
             }
             Spacer(Modifier.height(14.dp))
             Text("By continuing, you agree to our", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

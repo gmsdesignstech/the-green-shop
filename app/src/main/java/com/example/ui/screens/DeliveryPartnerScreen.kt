@@ -14,12 +14,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.rider.*
 import com.example.location.LocationService
 import kotlinx.coroutines.launch
+import com.example.ui.theme.GreenShopDarkGreen
+import com.example.ui.theme.GreenShopMintSurface
+import com.example.ui.theme.GreenShopPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +43,7 @@ fun DeliveryPartnerScreen(tokenProvider:suspend(Boolean)->Result<String>,onSignO
  LaunchedEffect(section){load()}
  fun availability(value:Boolean){val d=dashboard?:return;scope.launch{val token=tokenProvider(false).getOrElse{error=it.message;return@launch};busy=true;repository.availability(token,value,d.profile.availabilityVersion).fold({load()},{error=it.message});busy=false}}
  fun action(target:String,otp:String?=null){val a=dashboard?.active?:return;scope.launch{val token=tokenProvider(false).getOrElse{error=it.message;return@launch};busy=true;repository.action(token,a,target,otp).fold({load()},{error=it.message});busy=false}}
- Scaffold(topBar={TopAppBar(title={Column{Text("THE GREEN SHOP",fontWeight=FontWeight.Black);Text("Delivery Partner • Freshness At Your Doorstep",style=MaterialTheme.typography.labelSmall)}},actions={IconButton(onClick=onSignOut){Icon(Icons.AutoMirrored.Rounded.Logout,"Sign out")}})},bottomBar={NavigationBar{listOf("Home" to Icons.Rounded.Home,"History" to Icons.Rounded.History,"Earnings" to Icons.Rounded.CurrencyRupee,"Notifications" to Icons.Rounded.Notifications).forEach{(name,icon)->NavigationBarItem(selected=section==name,onClick={section=name},icon={Icon(icon,null)},label={Text(name)})}}}){padding->
+ Scaffold(topBar={TopAppBar(title={Column{Text("THE GREEN SHOP",fontWeight=FontWeight.Black);Text("Delivery operations",style=MaterialTheme.typography.labelSmall)}},actions={IconButton(onClick=onSignOut){Icon(Icons.AutoMirrored.Rounded.Logout,"Sign out")}},colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.surface))},bottomBar={NavigationBar(containerColor=MaterialTheme.colorScheme.surface,tonalElevation=8.dp){listOf("Home" to Icons.Rounded.Home,"History" to Icons.Rounded.History,"Earnings" to Icons.Rounded.CurrencyRupee,"Payouts" to Icons.Rounded.AccountBalanceWallet,"Notifications" to Icons.Rounded.Notifications).forEach{(name,icon)->NavigationBarItem(selected=section==name,onClick={section=name},icon={Icon(icon,null)},label={Text(if(name=="Notifications")"Alerts" else name)},colors=NavigationBarItemDefaults.colors(indicatorColor=GreenShopMintSurface,selectedIconColor=GreenShopPrimary))}}}){padding->
   when{loading->RiderLoading(Modifier.padding(padding));error!=null->RiderError(error!!,{scope.launch{load()}},Modifier.padding(padding));section=="Home"->RiderHome(dashboard,busy,::availability,::action,onRetry={scope.launch{load()}},onNavigate={address->context.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q=${Uri.encode(address)}")))},onLocation={val a=dashboard?.active;if(a!=null)scope.launch{val token=tokenProvider(false).getOrElse{error=it.message;return@launch};busy=true;location.getCurrentLocation().fold({point->repository.sendLocation(token,a.id,point).fold({},{error=it.message})},{error=it.message});busy=false}},onSupport={supportOpen=true},modifier=Modifier.padding(padding));else->RiderList(rows,section,Modifier.padding(padding))}
  }
  if(supportOpen)SupportDialog(onDismiss={supportOpen=false}){category,description->scope.launch{val token=tokenProvider(false).getOrElse{error=it.message;return@launch};repository.support(token,dashboard?.active?.id,category,description).fold({supportOpen=false},{error=it.message})}}
@@ -47,7 +53,19 @@ fun DeliveryPartnerScreen(tokenProvider:suspend(Boolean)->Result<String>,onSignO
 private fun RiderHome(d:RiderDashboard?,busy:Boolean,onAvailability:(Boolean)->Unit,onAction:(String,String?)->Unit,onRetry:()->Unit,onNavigate:(String)->Unit,onLocation:()->Unit,onSupport:()->Unit,modifier:Modifier){
  if(d==null)return
  LazyColumn(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha=.2f)),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-  item{Text("Hello, ${d.profile.name}",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Black);Text("Approved partner • ${d.profile.serviceArea}",color=MaterialTheme.colorScheme.primary)}
+  item{
+   Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brush.linearGradient(listOf(GreenShopDarkGreen,GreenShopPrimary))).padding(22.dp)){
+    Column{
+     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+      Box(Modifier.size(48.dp).clip(RoundedCornerShape(15.dp)).background(Color.White.copy(alpha=.15f)),contentAlignment=Alignment.Center){Icon(Icons.Rounded.DeliveryDining,null,tint=Color.White)}
+      Spacer(Modifier.width(13.dp));Column(Modifier.weight(1f)){Text("Hello, ${d.profile.name}",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black,color=Color.White);Text(d.profile.serviceArea,color=Color.White.copy(alpha=.75f),style=MaterialTheme.typography.bodySmall)}
+      Surface(color=if(d.profile.online)Color(0xFFCBF7D5) else Color.White.copy(alpha=.14f),shape=RoundedCornerShape(50)){Text(if(d.profile.online)"ONLINE" else "OFFLINE",Modifier.padding(horizontal=10.dp,vertical=6.dp),color=if(d.profile.online)GreenShopDarkGreen else Color.White,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Black)}
+     }
+     Spacer(Modifier.height(18.dp));Text(if(d.active==null)"You’re all caught up" else "Delivery #${d.active.orderId} is active",color=Color.White,style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Black)
+     Text(if(d.active==null)"New assignments will appear automatically." else "Complete the next verified step below.",color=Color.White.copy(alpha=.78f))
+    }
+   }
+  }
   if(d.unavailableSections.isNotEmpty())item{
    ElevatedCard(shape=RoundedCornerShape(14.dp)){
     Row(Modifier.fillMaxWidth().padding(14.dp),verticalAlignment=Alignment.CenterVertically){
@@ -56,7 +74,7 @@ private fun RiderHome(d:RiderDashboard?,busy:Boolean,onAvailability:(Boolean)->U
     }
    }
   }
-  item{ElevatedCard(shape=RoundedCornerShape(18.dp)){Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Column(Modifier.weight(1f)){Text(if(d.profile.online)"You’re online" else "You’re offline",fontWeight=FontWeight.Bold);Text(if(d.profile.online)"Ready for assigned deliveries" else "Location sharing is stopped",style=MaterialTheme.typography.bodySmall)};Switch(d.profile.online,{onAvailability(it)},enabled=!busy)}}}
+  item{Card(shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outline.copy(alpha=.65f))){Row(Modifier.fillMaxWidth().padding(18.dp),verticalAlignment=Alignment.CenterVertically){Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(GreenShopMintSurface),contentAlignment=Alignment.Center){Icon(Icons.Rounded.PowerSettingsNew,null,tint=GreenShopPrimary)};Spacer(Modifier.width(12.dp));Column(Modifier.weight(1f)){Text(if(d.profile.online)"Available for delivery" else "Currently unavailable",fontWeight=FontWeight.Bold);Text(if(d.profile.online)"The server can assign new orders" else "Location sharing is stopped",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};Switch(d.profile.online,{onAvailability(it)},enabled=!busy)}}}
   item{Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Metric("Completed today",d.summary.todayCompleted,Modifier.weight(1f));Metric("Today’s earnings",d.summary.todayEarnings.asRupees(),Modifier.weight(1f))}}
   item{Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Metric("Earned, unpaid",d.summary.pendingEarnings.asRupees(),Modifier.weight(1f));Metric("Pending payout",d.summary.pendingPayout.asRupees(),Modifier.weight(1f))}}
   item{Text("Active delivery",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold)}
@@ -65,7 +83,7 @@ private fun RiderHome(d:RiderDashboard?,busy:Boolean,onAvailability:(Boolean)->U
  }
 }
 private fun String.asRupees()=if(this=="—")this else "₹$this"
-@Composable private fun Metric(label:String,value:String,modifier:Modifier)=ElevatedCard(modifier,shape=RoundedCornerShape(16.dp)){Column(Modifier.padding(16.dp)){Text(value,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.primary);Text(label,style=MaterialTheme.typography.bodySmall)}}
+@Composable private fun Metric(label:String,value:String,modifier:Modifier)=Card(modifier,shape=RoundedCornerShape(18.dp),colors=CardDefaults.cardColors(containerColor=MaterialTheme.colorScheme.surface),border=androidx.compose.foundation.BorderStroke(1.dp,MaterialTheme.colorScheme.outline.copy(alpha=.65f))){Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(GreenShopMintSurface),contentAlignment=Alignment.Center){Icon(if(label.contains("earning",true)||label.contains("payout",true))Icons.Rounded.CurrencyRupee else Icons.Rounded.CheckCircle,null,tint=GreenShopPrimary,modifier=Modifier.size(17.dp))};Text(value,style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Black,color=MaterialTheme.colorScheme.onSurface);Text(label,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}
 @Composable
 private fun AssignmentCard(a:RiderAssignment,busy:Boolean,onAction:(String,String?)->Unit,onNavigate:(String)->Unit,onLocation:()->Unit) {
     var otp by remember { mutableStateOf("") }

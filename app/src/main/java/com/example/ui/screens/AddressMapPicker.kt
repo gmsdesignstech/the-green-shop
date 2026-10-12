@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.location.LocationService
+import com.example.BuildConfig
 import com.example.ui.components.rememberLocationPermissionState
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -60,6 +61,8 @@ fun AddressMapPicker(
     initialLongitude: Double,
     onBack: () -> Unit,
     onConfirm: (addressLine: String, locality: String, latitude: Double, longitude: Double) -> Unit,
+    isSaving: Boolean = false,
+    saveError: String? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -118,18 +121,32 @@ fun AddressMapPicker(
         }
 
         Box(modifier = Modifier.fillMaxWidth().height(330.dp)) {
-            GoogleMap(
-                modifier = Modifier.fillMaxSize().testTag("delivery_address_map"),
-                cameraPositionState = cameraState,
-                properties = MapProperties(isMyLocationEnabled = permissionState.hasAnyLocationPermission),
-                uiSettings = MapUiSettings(myLocationButtonEnabled = false, zoomControlsEnabled = false),
-                onMapClick = { location -> scope.launch { selectLocation(location) } }
-            ) {
-                Marker(
-                    state = markerState,
-                    title = "Delivery location",
-                    snippet = addressLine.ifBlank { "Tap the map to move this pin" }
-                )
+            if (BuildConfig.MAPS_CONFIGURED) {
+                GoogleMap(
+                    modifier = Modifier.fillMaxSize().testTag("delivery_address_map"),
+                    cameraPositionState = cameraState,
+                    properties = MapProperties(isMyLocationEnabled = permissionState.hasAnyLocationPermission),
+                    uiSettings = MapUiSettings(myLocationButtonEnabled = false, zoomControlsEnabled = false),
+                    onMapClick = { location -> scope.launch { selectLocation(location) } }
+                ) {
+                    Marker(
+                        state = markerState,
+                        title = "Delivery location",
+                        snippet = addressLine.ifBlank { "Tap the map to move this pin" }
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("Map is not configured", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Use your current location or enter the delivery address manually below.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
 
             FloatingActionButton(
@@ -159,7 +176,11 @@ fun AddressMapPicker(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Tap the map to place the delivery pin.", style = MaterialTheme.typography.bodySmall)
+            Text(
+                if (BuildConfig.MAPS_CONFIGURED) "Tap the map to place the delivery pin."
+                else "Enter the address manually. Coordinates can still come from your device location.",
+                style = MaterialTheme.typography.bodySmall
+            )
             if (isLoading) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(modifier = Modifier.height(20.dp))
@@ -167,6 +188,7 @@ fun AddressMapPicker(
                 }
             }
             message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            saveError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             OutlinedTextField(
                 value = addressLine,
                 onValueChange = { addressLine = it },
@@ -190,10 +212,12 @@ fun AddressMapPicker(
                         selectedLocation.longitude
                     )
                 },
-                enabled = addressLine.isNotBlank() && locality.isNotBlank() && !isLoading,
+                enabled = addressLine.length >= 5 && locality.length >= 2 && !isLoading && !isSaving,
                 modifier = Modifier.fillMaxWidth().testTag("confirm_delivery_address")
             ) {
-                Text("Confirm delivery address")
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.height(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else Text("Confirm delivery address")
             }
         }
     }

@@ -14,6 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,6 +27,9 @@ import com.example.data.admin.AdminRow
 import java.io.IOException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.ui.theme.GreenShopDarkGreen
+import com.example.ui.theme.GreenShopMintSurface
+import com.example.ui.theme.GreenShopPrimary
 
 private data class AdminDestination(val name: String, val icon: ImageVector, val available: Boolean = true)
 private val destinations = listOf(
@@ -47,6 +53,7 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
     var dashboard by remember { mutableStateOf<AdminDashboard?>(null) }
     var rows by remember { mutableStateOf<List<AdminRow>>(emptyList()) }
     var customerAction by remember { mutableStateOf<AdminRow?>(null) }
+    var partnerAction by remember { mutableStateOf<AdminRow?>(null) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -100,7 +107,14 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
                     error != null -> ErrorState(error!!) { loading = true }
                     selected == "Dashboard" -> DashboardContent(dashboard)
                     rows.isEmpty() -> EmptyState(selected)
-                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 30.dp)) { items(rows, key = { it.id }) { row -> AdminRowCard(row, if (selected == "Customers") ({ customerAction = row }) else null) } }
+                    else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(top = 12.dp, bottom = 30.dp)) { items(rows, key = { it.id }) { row ->
+                        val action = when (selected) {
+                            "Customers" -> ({ customerAction = row })
+                            "Delivery partners" -> ({ partnerAction = row })
+                            else -> null
+                        }
+                        AdminRowCard(row, action)
+                    } }
                 }
             }
         }
@@ -124,9 +138,38 @@ fun AdminDashboardScreen(tokenProvider: suspend (Boolean) -> Result<String>, onS
             }
         )
     }
+    partnerAction?.let { partner ->
+        PartnerReviewDialog(
+            partner = partner,
+            busy = busy,
+            onDismiss = { partnerAction = null },
+            onConfirm = { status, reason ->
+                scope.launch {
+                    busy = true
+                    val token = tokenProvider(false).getOrElse { error = adminErrorMessage(it); busy = false; return@launch }
+                    repository.reviewDeliveryPartner(token, partner.id, status, reason).fold(
+                        onSuccess = { partnerAction = null; load() },
+                        onFailure = { error = adminErrorMessage(it) }
+                    )
+                    busy = false
+                }
+            }
+        )
+    }
 }
 
-@Composable private fun BrandHeader() = Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(24.dp)) { Text("THE GREEN SHOP", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge); Text("Store command centre", color = MaterialTheme.colorScheme.onPrimary.copy(alpha=.8f)) }
+@Composable private fun BrandHeader() = Column(
+    Modifier.fillMaxWidth().background(
+        Brush.linearGradient(listOf(GreenShopDarkGreen, GreenShopPrimary))
+    ).padding(horizontal = 24.dp, vertical = 28.dp)
+) {
+    Surface(color = Color.White.copy(alpha = .14f), shape = RoundedCornerShape(10.dp)) {
+        Text("GS", Modifier.padding(horizontal = 10.dp, vertical = 7.dp), color = Color.White, fontWeight = FontWeight.Black)
+    }
+    Spacer(Modifier.height(14.dp))
+    Text("THE GREEN SHOP", color = Color.White, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge)
+    Text("Operations command centre", color = Color.White.copy(alpha=.78f), style = MaterialTheme.typography.bodySmall)
+}
 @Composable
 private fun DashboardContent(data: AdminDashboard?) {
     if (data == null) {
@@ -137,7 +180,22 @@ private fun DashboardContent(data: AdminDashboard?) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
     ) {
-        item { Text("Operations overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+        item {
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(
+                    Brush.linearGradient(listOf(GreenShopDarkGreen, GreenShopPrimary))
+                ).padding(22.dp)
+            ) {
+                Column {
+                    Surface(color = Color.White.copy(alpha = .14f), shape = RoundedCornerShape(50)) {
+                        Text("LIVE OPERATIONS", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text("Business at a glance", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Text("Orders, customers and inventory from the secure backend.", color = Color.White.copy(alpha = .8f), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
         if (data.unavailableSections.isNotEmpty()) {
             item {
                 Surface(
@@ -158,10 +216,18 @@ private fun DashboardContent(data: AdminDashboard?) {
             data.metrics.chunked(2).forEach { pair ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     pair.forEach { metric ->
-                        ElevatedCard(Modifier.weight(1f).padding(bottom = 10.dp), shape = RoundedCornerShape(16.dp)) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(metric.value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                                Text(metric.label, style = MaterialTheme.typography.bodySmall)
+                        Card(
+                            Modifier.weight(1f).padding(bottom = 10.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .65f))
+                        ) {
+                            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                                Box(Modifier.size(36.dp).clip(RoundedCornerShape(11.dp)).background(GreenShopMintSurface), contentAlignment = Alignment.Center) {
+                                    Icon(metricIcon(metric.label), null, tint = GreenShopPrimary, modifier = Modifier.size(19.dp))
+                                }
+                                Text(metric.value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
+                                Text(metric.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -188,6 +254,15 @@ private fun DashboardContent(data: AdminDashboard?) {
     }
 }
 
+private fun metricIcon(label: String): ImageVector = when {
+    label.contains("order", true) -> Icons.Rounded.ReceiptLong
+    label.contains("customer", true) -> Icons.Rounded.People
+    label.contains("partner", true) || label.contains("delivery", true) -> Icons.Rounded.DeliveryDining
+    label.contains("revenue", true) || label.contains("sales", true) || label.contains("payment", true) -> Icons.Rounded.CurrencyRupee
+    label.contains("stock", true) || label.contains("product", true) -> Icons.Rounded.Inventory2
+    else -> Icons.Rounded.Analytics
+}
+
 private fun adminErrorMessage(error: Throwable): String = when (error) {
     is AdminApiException -> when (error.statusCode) {
         401 -> "Your admin session expired. Sign in again."
@@ -204,6 +279,24 @@ private fun adminErrorMessage(error: Throwable): String = when (error) {
     val next=if(customer.status.equals("suspended",true))"active" else "suspended"
     var reason by remember(customer.id){mutableStateOf("")}
     AlertDialog(onDismissRequest=onDismiss,title={Text(if(next=="active")"Reactivate customer" else "Suspend customer")},text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("${customer.title} will be marked $next. This administrative action is recorded in the audit log.");OutlinedTextField(reason,{reason=it.take(500)},label={Text("Reason")},minLines=2,modifier=Modifier.fillMaxWidth())}},confirmButton={Button(onClick={onConfirm(next,reason.trim())},enabled=!busy&&reason.trim().length>=3){Text(if(next=="active")"Reactivate" else "Suspend")}},dismissButton={TextButton(onClick=onDismiss,enabled=!busy){Text("Cancel")}})
+}
+@Composable private fun PartnerReviewDialog(partner:AdminRow,busy:Boolean,onDismiss:()->Unit,onConfirm:(String,String)->Unit){
+    val statuses = listOf("under_review", "approved", "rejected", "suspended")
+    var selected by remember(partner.id){mutableStateOf(when(partner.status?.lowercase()){"approved"->"suspended";"suspended"->"approved";else->"approved"})}
+    var reason by remember(partner.id){mutableStateOf("")}
+    AlertDialog(
+        onDismissRequest=onDismiss,
+        title={Text("Review delivery partner")},
+        text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+            Text(partner.title,fontWeight=FontWeight.Bold)
+            Text(partner.subtitle,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            statuses.forEach{status->Row(Modifier.fillMaxWidth().clickable{selected=status}.padding(vertical=4.dp),verticalAlignment=Alignment.CenterVertically){RadioButton(selected==status,{selected=status});Text(status.replace('_',' ').replaceFirstChar(Char::uppercase))}}
+            OutlinedTextField(reason,{reason=it.take(1000)},label={Text("Decision reason")},minLines=2,modifier=Modifier.fillMaxWidth())
+            Text("The decision and administrator identity are stored in the audit log.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }},
+        confirmButton={Button(onClick={onConfirm(selected,reason.trim())},enabled=!busy&&reason.trim().length>=3){Text("Save decision")}},
+        dismissButton={TextButton(onClick=onDismiss,enabled=!busy){Text("Cancel")}}
+    )
 }
 @Composable private fun LoadingState()=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){CircularProgressIndicator();Spacer(Modifier.height(12.dp));Text("Loading live operations…")}
 @Composable private fun ErrorState(message:String,retry:()->Unit)=Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.Center,horizontalAlignment=Alignment.CenterHorizontally){Icon(Icons.Rounded.CloudOff,null,tint=MaterialTheme.colorScheme.error);Text(message,modifier=Modifier.padding(16.dp));Button(onClick=retry){Text("Retry")}}
