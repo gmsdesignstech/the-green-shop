@@ -13,25 +13,27 @@ Audit date: 2026-10-12
   five routes. The three catalog bodies were `{ "items": [] }`.
 - Automated result: 16 test files and 80 tests passed, including five HTTP route tests. Typecheck,
   NestJS build, and `npm audit` passed; npm reports zero vulnerabilities.
-- Production verification on 2026-10-12: health and database health returned HTTP 200; all three
-  catalog endpoints returned the NestJS HTTP 404 `Cannot GET` response.
-- Local `main` and GitHub `origin/main` are both commit
-  `2b41c9f05a92f7841b26fcb447259f6203dc82fe`. The catalog source is currently untracked, so it is
-  not in that commit and cannot be present in a Render deployment built from `origin/main`.
+- Production verification on 2026-10-12 after deployment: health, database health, categories,
+  products, and promotions all returned HTTP 200. Categories returned two records, products
+  returned five records, and promotions returned an empty `items` array.
+- Recovery commit `402af56` was pushed to GitHub `origin/main`. The public catalog route changed
+  from HTTP 404 to HTTP 200 at 19:12 IST, confirming that Render deployed the updated backend.
 - `render.yaml` uses root directory `backend`, `npm ci && npm run typecheck && npm run build`,
   `npm start`, and `/api/v1/health`. Those commands are correct for the updated backend.
-- Render's exact deployed commit cannot be established from its public HTTP API because the app
-  exposes no version endpoint and no authenticated Render dashboard/API access is configured.
+- The deployed behavior proves that the recovery code is active. The exact Render commit metadata
+  still cannot be read from its public HTTP API because no authenticated Render dashboard/API
+  access or version endpoint is configured.
 
 ### Database
 
-- Read-only inspection confirmed that `public.categories`, `public.products`, and
-  `public.promotions` exist in the configured database. Counts are 0, 0, and 0 respectively.
+- Before seeding, read-only inspection confirmed that `public.categories`, `public.products`, and
+  `public.promotions` existed with counts 0, 0, and 0 respectively.
 - `supabase_migrations.schema_migrations` is absent, so migration history/status cannot be proven
   from that database. The repository uses declarative schemas in `supabase/schemas`.
-- A review-only idempotent starter seed is prepared at `supabase/seed/initial_catalog.sql`. It uses
-  stable slugs/SKUs and `ON CONFLICT DO NOTHING`, does not update existing admin-managed data, and
-  creates no users, orders, payments, analytics, or promotion. It has **not** been run.
+- After explicit user approval, `supabase/seed/initial_catalog.sql` was run once. Counts are now two
+  categories, five products, zero promotions, and five inventory rows. It uses stable slugs/SKUs
+  and `ON CONFLICT DO NOTHING`, did not update existing admin-managed values, and created no users,
+  orders, payments, analytics, or promotions.
 
 ### Google Maps and Android
 
@@ -49,8 +51,9 @@ Audit date: 2026-10-12
 ### End-to-end status
 
 - The debug app is buildable and catalog parsing/error/empty-state behavior is implemented.
-- Real categories, products, offers, and Maps are **not end-to-end verified** because the deployed
-  API lacks the catalog routes, the database is empty, and the Maps key is not configured.
+- Real categories and products are verified through the deployed API. Offers correctly return an
+  empty list because no promotion was authorized. Device-level UI and Maps remain unverified
+  because no emulator/physical-device session is attached and the Maps key is not configured.
 - Authentication, authorization, inventory validation, payment verification, cart, orders, and
   existing UI architecture were preserved. No production mutation or deployment was performed.
 
